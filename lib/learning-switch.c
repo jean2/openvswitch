@@ -55,6 +55,15 @@ struct lswitch {
 
     /* Number of outgoing queued packets on the rconn. */
     struct rconn_packet_counter *queued;
+
+    /* Feature reply callback and opaque metadata */
+    feature_handler_cb *feat_callback;
+    void *aux;
+
+    /* For twin connections */
+    struct lswitch *twin;
+    struct rconn *twin_rconn;
+    bool slave;
 };
 
 /* The log messages here could actually be useful in debugging, so keep the
@@ -126,6 +135,10 @@ lswitch_destroy(struct lswitch *sw)
     if (sw) {
         mac_learning_destroy(sw->ml);
         rconn_packet_counter_destroy(sw->queued);
+	if(sw->twin != NULL) {
+	    sw->twin->twin = NULL;
+	    sw->twin->twin_rconn = NULL;
+	}
         free(sw);
     }
 }
@@ -137,6 +150,32 @@ void
 lswitch_set_queue(struct lswitch *sw, uint32_t queue)
 {
     sw->queue = queue;
+}
+
+/* Sets 'feat_callback' */
+void
+lswitch_set_feat_cb(struct lswitch *sw,
+		    feature_handler_cb *feat_callback, void *aux)
+{
+    sw->feat_callback = feat_callback;
+    sw->aux = aux;
+}
+
+/* Sets 'twin' */
+void
+lswitch_set_twin(struct lswitch *sw, struct lswitch *twin,
+		 struct rconn *rconn, bool slave)
+{
+    sw->twin = twin;
+    sw->twin_rconn = rconn;
+    sw->slave = slave;
+}
+
+/* Gets 'datapath_id' */
+unsigned long long int
+lswitch_get_dpid(struct lswitch *sw)
+{
+    return sw->datapath_id;
 }
 
 /* Takes care of necessary 'sw' activity, except for receiving packets (which
@@ -318,6 +357,10 @@ process_switch_features(struct lswitch *sw, struct rconn *rconn OVS_UNUSED,
     struct ofp_switch_features *osf = osf_;
 
     sw->datapath_id = ntohll(osf->datapath_id);
+
+    if(sw->feat_callback != NULL) {
+        sw->feat_callback(sw->aux, sw, osf);
+    }
 }
 
 static uint16_t
@@ -363,6 +406,10 @@ lswitch_choose_destination(struct lswitch *sw, const flow_t *flow)
 static void
 process_packet_in(struct lswitch *sw, struct rconn *rconn, void *opi_)
 {
+    struct lswitch *sw_master = sw;
+    struct lswitch *sw_slave = sw;
+    struct rconn *rconn_master = rconn;
+    struct rconn *rconn_slave = rconn;
     struct ofp_packet_in *opi = opi_;
     uint16_t in_port = ntohs(opi->in_port);
     uint16_t out_port;
@@ -373,6 +420,17 @@ process_packet_in(struct lswitch *sw, struct rconn *rconn, void *opi_)
     size_t pkt_ofs, pkt_len;
     struct ofpbuf pkt;
     flow_t flow;
+
+    /* Deal with bonded connections */
+    if (sw->twin != NULL) {
+        if (sw->slave) {
+	    sw_master = sw->twin;
+	    rconn_master = sw->twin_rconn;
+	} else {
+	    sw_slave = sw->twin;
+	    rconn_slave = sw->twin_rconn;
+	}
+    }
 
     /* Ignore packets sent via output to OFPP_CONTROLLER.  This library never
      * uses such an action.  You never know what experiments might be going on,
@@ -389,12 +447,12 @@ process_packet_in(struct lswitch *sw, struct rconn *rconn, void *opi_)
     flow_extract(&pkt, 0, in_port, &flow);
 
     /* Choose output port. */
-    out_port = lswitch_choose_destination(sw, &flow);
+    out_port = lswitch_choose_destination(sw_master, &flow);
 
     /* Make actions. */
     if (out_port == OFPP_NONE) {
         actions_len = 0;
-    } else if (sw->queue == UINT32_MAX || out_port >= OFPP_MAX) {
+    } else if (sw_master->queue == UINT32_MAX || out_port >= OFPP_MAX) {
         struct ofp_action_output oao;
 
         memset(&oao, 0, sizeof oao);
@@ -411,7 +469,7 @@ process_packet_in(struct lswitch *sw, struct rconn *rconn, void *opi_)
         oae.type = htons(OFPAT_ENQUEUE);
         oae.len = htons(sizeof oae);
         oae.port = htons(out_port);
-        oae.queue_id = htonl(sw->queue);
+        oae.queue_id = htonl(sw_master->queue);
 
         memcpy(actions, &oae, sizeof oae);
         actions_len = sizeof oae;
@@ -419,22 +477,22 @@ process_packet_in(struct lswitch *sw, struct rconn *rconn, void *opi_)
     assert(actions_len <= sizeof actions);
 
     /* Send the packet, and possibly the whole flow, to the output port. */
-    if (sw->max_idle >= 0 && (!sw->ml || out_port != OFPP_FLOOD)) {
+    if (sw_master->max_idle >= 0 && (!sw_master->ml || out_port != OFPP_FLOOD)) {
         struct ofpbuf *buffer;
         struct ofp_flow_mod *ofm;
 
         /* The output port is known, or we always flood everything, so add a
          * new flow. */
         buffer = make_add_flow(&flow, ntohl(opi->buffer_id),
-                               sw->max_idle, actions_len);
+                               sw_master->max_idle, actions_len);
         ofpbuf_put(buffer, actions, actions_len);
         ofm = buffer->data;
-        ofm->match.wildcards = htonl(sw->wildcards);
-        queue_tx(sw, rconn, buffer);
+        ofm->match.wildcards = htonl(sw_master->wildcards);
+        queue_tx(sw_master, rconn_master, buffer);
 
         /* If the switch didn't buffer the packet, we need to send a copy. */
         if (ntohl(opi->buffer_id) == UINT32_MAX && actions_len > 0) {
-            queue_tx(sw, rconn,
+            queue_tx(sw_slave, rconn_slave,
                      make_packet_out(&pkt, UINT32_MAX, in_port,
                                      actions, actions_len / sizeof *actions));
         }
@@ -442,7 +500,7 @@ process_packet_in(struct lswitch *sw, struct rconn *rconn, void *opi_)
         /* We don't know that MAC, or we don't set up flows.  Send along the
          * packet without setting up a flow. */
         if (ntohl(opi->buffer_id) != UINT32_MAX || actions_len > 0) {
-            queue_tx(sw, rconn,
+            queue_tx(sw_slave, rconn_slave,
                      make_packet_out(&pkt, ntohl(opi->buffer_id), in_port,
                                      actions, actions_len / sizeof *actions));
         }

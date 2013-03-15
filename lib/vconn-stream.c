@@ -365,9 +365,9 @@ pvconn_pstream_wait(struct pvconn *pvconn)
 
 /* Stream-based vconns and pvconns. */
 
-#define DEFINE_VCONN_STREAM_CLASS(NAME)             \
-        struct vconn_class NAME##_vconn_class = {   \
-            #NAME,                                  \
+#define DEFINE_VCONN_STREAM_CLASS(NAME, TYPE)	    \
+        struct vconn_class TYPE##_vconn_class = {   \
+            NAME,                                  \
             vconn_stream_open,                      \
             vconn_stream_close,                     \
             vconn_stream_connect,                   \
@@ -378,25 +378,29 @@ pvconn_pstream_wait(struct pvconn *pvconn)
             vconn_stream_wait,                      \
         };
 
-#define DEFINE_PVCONN_STREAM_CLASS(NAME)            \
-        struct pvconn_class NAME##_pvconn_class = { \
-            #NAME,                                  \
+#define DEFINE_PVCONN_STREAM_CLASS(NAME, TYPE)	    \
+        struct pvconn_class TYPE##_pvconn_class = { \
+            NAME,                                  \
             pvconn_pstream_listen,                  \
             pvconn_pstream_close,                   \
             pvconn_pstream_accept,                  \
             pvconn_pstream_wait                     \
         };
 
-static DEFINE_VCONN_STREAM_CLASS(stream);
-static DEFINE_PVCONN_STREAM_CLASS(pstream);
+static DEFINE_VCONN_STREAM_CLASS("stream", stream);
+static DEFINE_PVCONN_STREAM_CLASS("pstream", pstream);
 
-DEFINE_VCONN_STREAM_CLASS(tcp);
-DEFINE_PVCONN_STREAM_CLASS(ptcp);
+DEFINE_VCONN_STREAM_CLASS("tcp", tcp);
+DEFINE_PVCONN_STREAM_CLASS("ptcp", ptcp);
+DEFINE_VCONN_STREAM_CLASS("tcp+tcp", tcp_tcp);
+DEFINE_PVCONN_STREAM_CLASS("ptcp+tcp", ptcp_tcp);
+DEFINE_VCONN_STREAM_CLASS("tcp+udp", tcp_udp);
+DEFINE_PVCONN_STREAM_CLASS("ptcp+udp", ptcp_udp);
 
-DEFINE_VCONN_STREAM_CLASS(unix);
-DEFINE_PVCONN_STREAM_CLASS(punix);
+DEFINE_VCONN_STREAM_CLASS("unix", unix);
+DEFINE_PVCONN_STREAM_CLASS("punix", punix);
 
 #ifdef HAVE_OPENSSL
-DEFINE_VCONN_STREAM_CLASS(ssl);
-DEFINE_PVCONN_STREAM_CLASS(pssl);
+DEFINE_VCONN_STREAM_CLASS("ssl", ssl);
+DEFINE_PVCONN_STREAM_CLASS("pssl", pssl);
 #endif

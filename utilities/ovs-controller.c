@@ -38,6 +38,7 @@
 #include "util.h"
 #include "vconn.h"
 #include "vlog.h"
+#include "xtoxll.h"
 
 VLOG_DEFINE_THIS_MODULE(controller)
 
@@ -47,6 +48,7 @@ VLOG_DEFINE_THIS_MODULE(controller)
 struct switch_ {
     struct lswitch *lswitch;
     struct rconn *rconn;
+    int auxiliary_id;
 };
 
 /* Learn the ports on which MAC addresses appear? */
@@ -83,13 +85,15 @@ static void new_switch(struct switch_ *, struct vconn *);
 static void parse_options(int argc, char *argv[]);
 static void usage(void) NO_RETURN;
 
+static struct switch_ switches[MAX_SWITCHES];
+static int n_switches;
+
 int
 main(int argc, char *argv[])
 {
     struct unixctl_server *unixctl;
-    struct switch_ switches[MAX_SWITCHES];
     struct pvconn *listeners[MAX_LISTENERS];
-    int n_switches, n_listeners;
+    int n_listeners;
     int retval;
     int i;
 
@@ -120,11 +124,26 @@ main(int argc, char *argv[])
             struct pvconn *pvconn;
             retval = pvconn_open(name, &pvconn);
             if (!retval) {
+	        char *clone_name = xstrdup(name);
+		char *plus_char = strchr(clone_name, '+');
+		char *colon_char = strchr(clone_name, ':');
                 if (n_listeners >= MAX_LISTENERS) {
                     ovs_fatal(0, "max %d passive connections", n_listeners);
                 }
                 listeners[n_listeners++] = pvconn;
-            }
+		if((plus_char != NULL) && (plus_char < colon_char)
+		   && (strncmp(clone_name, plus_char + 1, 3)) ) {
+		    plus_char[0] = 'p';
+		    retval = pvconn_open(plus_char, &pvconn);
+		    if (!retval) {
+		        if (n_listeners >= MAX_LISTENERS) {
+			    ovs_fatal(0, "max %d passive connections", n_listeners);
+			}
+			listeners[n_listeners++] = pvconn;
+		    }
+		    VLOG_INFO("%s: openned listener on %s", name, plus_char);
+		}
+	    }
         }
         if (retval) {
             VLOG_ERR("%s: connect: %s", name, strerror(retval));
@@ -214,10 +233,58 @@ main(int argc, char *argv[])
 }
 
 static void
+switch_feature_cb(void *aux, struct lswitch *lswitch OVS_UNUSED,
+		  struct ofp_switch_features *osf)
+{
+    struct switch_ *this_sw = (struct switch_ *) aux;
+    unsigned long long int datapath_id = ntohll(osf->datapath_id);
+    int i;
+
+    if(datapath_id == 0)
+        return;
+
+    /* Save auxiliary_id. */
+    this_sw->auxiliary_id = osf->auxiliary_id;
+
+    for (i = 0; i < n_switches; i++) {
+        struct switch_ *other_sw = &switches[i];
+	if((other_sw != this_sw)
+	   && (lswitch_get_dpid(other_sw->lswitch) == datapath_id)) {
+	    const char *this_name = rconn_get_target(this_sw->rconn);
+	    const char *other_name = rconn_get_target(other_sw->rconn);
+	    struct switch_ *master_sw = NULL;
+	    struct switch_ *slave_sw = NULL;
+	    /* Sort out our connections */
+	    if(this_sw->auxiliary_id)
+	        slave_sw = this_sw;
+	    else
+	        master_sw = this_sw;
+	    if(other_sw->auxiliary_id >= 0) {
+	        if(other_sw->auxiliary_id)
+	            slave_sw = other_sw;
+	        else
+	            master_sw = other_sw;
+	    }
+	    if((master_sw != NULL) && (slave_sw != NULL)) {
+	        /* We have a valid pair, bind them */
+	        lswitch_set_twin(master_sw->lswitch, slave_sw->lswitch,
+				 slave_sw->rconn, false);
+	        lswitch_set_twin(slave_sw->lswitch, master_sw->lswitch,
+				 master_sw->rconn, true);
+                VLOG_INFO("%s: bound to %s (%s)", this_name, other_name,
+			  this_sw == master_sw ? "master" : "slave");
+	    } else
+                VLOG_ERR("%s: same dpid as %s", this_name, other_name);
+	}
+    }
+}
+
+static void
 new_switch(struct switch_ *sw, struct vconn *vconn)
 {
     sw->rconn = rconn_create(60, 0);
     rconn_connect_unreliably(sw->rconn, vconn, NULL);
+    sw->auxiliary_id = -1;
 
     /* If it was set, rewind 'flow_file' to the beginning, since a
      * previous call to lswitch_create() will leave the stream at the
@@ -230,6 +297,7 @@ new_switch(struct switch_ *sw, struct vconn *vconn)
                                  action_normal, flow_file);
 
     lswitch_set_queue(sw->lswitch, queue_id);
+    lswitch_set_feat_cb(sw->lswitch, &switch_feature_cb, (void *) sw);
 }
 
 static int

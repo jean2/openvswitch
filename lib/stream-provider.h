@@ -179,6 +179,10 @@ struct pstream_class {
 /* Active and passive stream classes. */
 extern struct stream_class tcp_stream_class;
 extern struct pstream_class ptcp_pstream_class;
+extern struct stream_class tcp_tcp_stream_class;
+extern struct pstream_class ptcp_tcp_pstream_class;
+extern struct stream_class tcp_udp_stream_class;
+extern struct pstream_class ptcp_udp_pstream_class;
 extern struct stream_class unix_stream_class;
 extern struct pstream_class punix_pstream_class;
 #ifdef HAVE_OPENSSL

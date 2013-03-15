@@ -48,6 +48,8 @@ enum stream_state {
 
 static struct stream_class *stream_classes[] = {
     &tcp_stream_class,
+    &tcp_tcp_stream_class,
+    &tcp_udp_stream_class,
     &unix_stream_class,
 #ifdef HAVE_OPENSSL
     &ssl_stream_class,
@@ -56,6 +58,8 @@ static struct stream_class *stream_classes[] = {
 
 static struct pstream_class *pstream_classes[] = {
     &ptcp_pstream_class,
+    &ptcp_tcp_pstream_class,
+    &ptcp_udp_pstream_class,
     &punix_pstream_class,
 #ifdef HAVE_OPENSSL
     &pssl_pstream_class,
@@ -113,6 +117,10 @@ stream_usage(const char *name, bool active, bool passive,
     if (active) {
         printf("Active %s connection methods:\n", name);
         printf("  tcp:IP:PORT             "
+               "PORT at remote IP\n");
+        printf("  tcp+tcp:IP:PORT             "
+               "PORT at remote IP\n");
+        printf("  tcp+udp:IP:PORT             "
                "PORT at remote IP\n");
 #ifdef HAVE_OPENSSL
         printf("  ssl:IP:PORT             "

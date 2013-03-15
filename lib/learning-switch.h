@@ -23,11 +23,20 @@
 
 struct ofpbuf;
 struct rconn;
+struct lswitch;
+struct ofp_switch_features;
+
+typedef void feature_handler_cb(void *aux, struct lswitch *sw,
+				struct ofp_switch_features *osf);
 
 struct lswitch *lswitch_create(struct rconn *, bool learn_macs,
                                bool exact_flows, int max_idle,
                                bool action_normal, FILE *default_flows);
 void lswitch_set_queue(struct lswitch *sw, uint32_t queue);
+void lswitch_set_feat_cb(struct lswitch *sw, feature_handler_cb *, void *aux);
+void lswitch_set_twin(struct lswitch *sw, struct lswitch *twin,
+		      struct rconn *rconn, bool slave);
+unsigned long long int lswitch_get_dpid(struct lswitch *sw);
 void lswitch_run(struct lswitch *);
 void lswitch_wait(struct lswitch *);
 void lswitch_destroy(struct lswitch *);

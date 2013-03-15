@@ -576,8 +576,8 @@ ofp_print_switch_features(struct ds *string, const void *oh, size_t len,
 
     ds_put_format(string, " ver:0x%x, dpid:%016"PRIx64"\n",
             osf->header.version, ntohll(osf->datapath_id));
-    ds_put_format(string, "n_tables:%d, n_buffers:%d\n", osf->n_tables,
-            ntohl(osf->n_buffers));
+    ds_put_format(string, "n_tables:%d, n_buffers:%d, aux_id:%d\n",
+		  osf->n_tables, ntohl(osf->n_buffers), osf->auxiliary_id);
     ds_put_format(string, "features: capabilities:%#x, actions:%#x\n",
            ntohl(osf->capabilities), ntohl(osf->actions));
 
@@ -1461,7 +1461,8 @@ ofp_to_string(const void *oh_, size_t len, int verbosity)
     const struct openflow_packet *pkt;
 
     if (len < sizeof(struct ofp_header)) {
-        ds_put_cstr(&string, "OpenFlow packet too short:\n");
+        ds_put_format(&string, "OpenFlow packet too short (len=%d):\n",
+		      (int) len);
         ds_put_hex_dump(&string, oh, len, 0, true);
         return ds_cstr(&string);
     } else if (oh->version != OFP_VERSION) {

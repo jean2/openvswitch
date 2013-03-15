@@ -178,6 +178,12 @@ struct pvconn_class {
 /* Active and passive vconn classes. */
 extern struct vconn_class tcp_vconn_class;
 extern struct pvconn_class ptcp_pvconn_class;
+extern struct vconn_class tcp_tcp_vconn_class;
+extern struct pvconn_class ptcp_tcp_pvconn_class;
+extern struct vconn_class tcp_udp_vconn_class;
+extern struct pvconn_class ptcp_udp_pvconn_class;
+extern struct vconn_class udp_vconn_class;
+extern struct pvconn_class pudp_pvconn_class;
 extern struct vconn_class unix_vconn_class;
 extern struct pvconn_class punix_pvconn_class;
 #ifdef HAVE_OPENSSL

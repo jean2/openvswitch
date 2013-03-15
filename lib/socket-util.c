@@ -510,7 +510,8 @@ inet_open_passive(int style, const char *target_, int default_port,
     }
 
     /* Listen. */
-    if (listen(fd, 10) < 0) {
+    if (style == SOCK_STREAM
+        && listen(fd, 10) < 0) {
         error = errno;
         VLOG_ERR("%s: listen: %s", target_, strerror(error));
         goto exit_close;

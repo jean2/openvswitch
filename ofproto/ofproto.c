@@ -184,6 +184,7 @@ static void send_flow_removed(struct ofproto *p, struct rule *rule,
  */
 enum ofconn_type {
     OFCONN_PRIMARY,             /* An ordinary OpenFlow controller. */
+    OFCONN_TWIN,                /* Twin to OpenFlow controller. */
     OFCONN_SERVICE              /* A service connection, e.g. "ovs-ofctl". */
 };
 
@@ -232,6 +233,9 @@ struct ofconn {
     struct discovery *discovery; /* Controller discovery object, if enabled. */
     struct status_category *ss;  /* Switch status category. */
     enum ofproto_band band;      /* In-band or out-of-band? */
+
+    /* type == OFCONN_PRIMARY or type == OFCONN_TWIN. */
+    struct ofconn *twin;
 };
 
 /* We use OFPR_NO_MATCH and OFPR_ACTION as indexes into struct ofconn's
@@ -488,6 +492,22 @@ add_controller(struct ofproto *ofproto, const struct ofproto_controller *c)
     }
     hmap_insert(&ofproto->controllers, &ofconn->hmap_node,
                 hash_string(c->target, 0));
+
+    if (!discovery) {
+        char *plus_char = strchr(c->target, '+');
+	char *colon_char = strchr(c->target, ':');
+	if((plus_char != NULL) && (plus_char < colon_char)) {
+	    struct ofconn *twin_ofconn;
+	    char *name = ofconn_make_name(ofproto, plus_char + 1);
+	    twin_ofconn = ofconn_create(ofproto, rconn_create(5, 8),
+					OFCONN_TWIN);
+	    ofconn->twin = twin_ofconn;
+	    twin_ofconn->twin = ofconn;
+	    rconn_connect(twin_ofconn->rconn, plus_char + 1, name);
+	    VLOG_INFO("%s: connecting twin to %s", c->target, plus_char + 1);
+	    free(name);
+	}
+    }
 }
 
 /* Reconfigures 'ofconn' to match 'c'.  This function cannot update an ofconn's
@@ -1644,6 +1664,13 @@ ofconn_create(struct ofproto *p, struct rconn *rconn, enum ofconn_type type)
 static void
 ofconn_destroy(struct ofconn *ofconn)
 {
+    if (ofconn->twin != NULL) {
+        ofconn->twin->twin = NULL;
+	if (ofconn->type == OFCONN_PRIMARY)
+	    ofconn_destroy(ofconn->twin);
+    }
+    ofconn->twin = NULL;
+
     if (ofconn->type == OFCONN_PRIMARY) {
         hmap_remove(&ofconn->ofproto->controllers, &ofconn->hmap_node);
     }
@@ -1734,6 +1761,9 @@ ofconn_receives_async_msgs(const struct ofconn *ofconn)
         /* Primary controllers always get asynchronous messages unless they
          * have configured themselves as "slaves".  */
         return ofconn->role != NX_ROLE_SLAVE;
+    } if (ofconn->type == OFCONN_TWIN) {
+        /* Twin never get async messages */
+        return false;
     } else {
         /* Service connections don't get asynchronous messages unless they have
          * explicitly asked for them by setting a nonzero miss send length. */
@@ -2354,6 +2384,7 @@ handle_features_request(struct ofproto *p, struct ofconn *ofconn,
     osf->datapath_id = htonll(p->datapath_id);
     osf->n_buffers = htonl(pktbuf_capacity());
     osf->n_tables = 2;
+    osf->auxiliary_id = (ofconn->type == OFCONN_TWIN) ? 1 : 0;
     osf->capabilities = htonl(OFPC_FLOW_STATS | OFPC_TABLE_STATS |
                               OFPC_PORT_STATS | OFPC_ARP_MATCH_IP);
     osf->actions = htonl((1u << OFPAT_OUTPUT) |
@@ -2886,7 +2917,13 @@ handle_packet_out(struct ofproto *p, struct ofconn *ofconn,
 
     COVERAGE_INC(ofproto_packet_out);
     if (opo->buffer_id != htonl(UINT32_MAX)) {
-        error = pktbuf_retrieve(ofconn->pktbuf, ntohl(opo->buffer_id),
+
+        struct pktbuf *pktbuf = ofconn->pktbuf;
+	if ((ofconn->twin != NULL)
+	    && (ofconn->type == OFCONN_TWIN) )
+	    pktbuf = ofconn->twin->pktbuf;
+
+        error = pktbuf_retrieve(pktbuf, ntohl(opo->buffer_id),
                                 &buffer, &in_port);
         if (error || !buffer) {
             return error;
@@ -4578,8 +4615,16 @@ static void
 do_send_packet_in(struct ofpbuf *packet, void *ofconn_)
 {
     struct ofconn *ofconn = ofconn_;
+    struct rconn *rconn = ofconn->rconn;
 
-    rconn_send_with_limit(ofconn->rconn, packet,
+    /* Use the twin if available */
+    if ((ofconn->twin != NULL)
+	&& (ofconn->twin->type == OFCONN_TWIN)
+	&& (rconn_is_connected(ofconn->twin->rconn)) ) {
+        rconn = ofconn->twin->rconn;
+    }
+
+    rconn_send_with_limit(rconn, packet,
                           ofconn->packet_in_counter, 100);
 }
 

@@ -55,6 +55,9 @@ enum vconn_state {
 
 static struct vconn_class *vconn_classes[] = {
     &tcp_vconn_class,
+    &tcp_tcp_vconn_class,
+    &tcp_udp_vconn_class,
+    &udp_vconn_class,
     &unix_vconn_class,
 #ifdef HAVE_OPENSSL
     &ssl_vconn_class,
@@ -63,6 +66,9 @@ static struct vconn_class *vconn_classes[] = {
 
 static struct pvconn_class *pvconn_classes[] = {
     &ptcp_pvconn_class,
+    &ptcp_tcp_pvconn_class,
+    &ptcp_udp_pvconn_class,
+    &pudp_pvconn_class,
     &punix_pvconn_class,
 #ifdef HAVE_OPENSSL
     &pssl_pvconn_class,
@@ -132,6 +138,10 @@ vconn_usage(bool active, bool passive, bool bootstrap OVS_UNUSED)
     if (active) {
         printf("Active OpenFlow connection methods:\n");
         printf("  tcp:IP[:PORT]         "
+               "PORT (default: %d) at remote IP\n", OFP_TCP_PORT);
+        printf("  tcp+tcp:IP[:PORT]         "
+               "PORT (default: %d) at remote IP\n", OFP_TCP_PORT);
+        printf("  tcp+udp:IP[:PORT]         "
                "PORT (default: %d) at remote IP\n", OFP_TCP_PORT);
 #ifdef HAVE_OPENSSL
         printf("  ssl:IP[:PORT]         "

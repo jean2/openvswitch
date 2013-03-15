@@ -145,6 +145,7 @@ lib_libopenvswitch_a_SOURCES = \
 	lib/valgrind.h \
 	lib/vconn-provider.h \
 	lib/vconn-stream.c \
+	lib/vconn-udp.c \
 	lib/vconn.c \
 	lib/vconn.h \
 	lib/vlog-modules.def \

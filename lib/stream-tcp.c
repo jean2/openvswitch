@@ -95,6 +95,30 @@ struct stream_class tcp_stream_class = {
     NULL,                       /* run_wait */
     NULL,                       /* wait */
 };
+
+struct stream_class tcp_tcp_stream_class = {
+    "tcp+tcp",                  /* name */
+    tcp_open,                   /* open */
+    NULL,                       /* close */
+    NULL,                       /* connect */
+    NULL,                       /* recv */
+    NULL,                       /* send */
+    NULL,                       /* run */
+    NULL,                       /* run_wait */
+    NULL,                       /* wait */
+};
+
+struct stream_class tcp_udp_stream_class = {
+    "tcp+udp",                  /* name */
+    tcp_open,                   /* open */
+    NULL,                       /* close */
+    NULL,                       /* connect */
+    NULL,                       /* recv */
+    NULL,                       /* send */
+    NULL,                       /* run */
+    NULL,                       /* run_wait */
+    NULL,                       /* wait */
+};
 
 /* Passive TCP. */
 
@@ -136,6 +160,22 @@ ptcp_accept(int fd, const struct sockaddr *sa, size_t sa_len,
 
 struct pstream_class ptcp_pstream_class = {
     "ptcp",
+    ptcp_open,
+    NULL,
+    NULL,
+    NULL
+};
+
+struct pstream_class ptcp_tcp_pstream_class = {
+    "ptcp+tcp",
+    ptcp_open,
+    NULL,
+    NULL,
+    NULL
+};
+
+struct pstream_class ptcp_udp_pstream_class = {
+    "ptcp+udp",
     ptcp_open,
     NULL,
     NULL,
