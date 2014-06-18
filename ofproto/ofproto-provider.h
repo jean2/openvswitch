@@ -1066,6 +1066,10 @@ struct ofproto_class {
      * not support LACP. */
     int (*port_is_lacp_current)(const struct ofport *port);
 
+    /* Checks if the 'port' has a recirculation peer, and return the port
+     * number of the peer if it does. Return OFPP_ANY for no peer. */
+    ofp_port_t (*port_get_recirculate_peer)(const struct ofport *port);
+
 /* ## ----------------------- ## */
 /* ## OpenFlow Rule Functions ## */
 /* ## ----------------------- ## */

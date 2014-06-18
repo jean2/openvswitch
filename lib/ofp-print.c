@@ -389,26 +389,34 @@ ofp_print_phy_port(struct ds *string, const struct ofputil_phy_port *port)
     ds_put_cstr(string, "     state:      ");
     ofp_print_port_state(string, port->state);
 
-    if (port->curr) {
-        ds_put_format(string, "     current:    ");
-        ofp_print_port_features(string, port->curr);
+    if (port->has_ethernet) {
+      if (port->curr) {
+          ds_put_format(string, "     current:    ");
+          ofp_print_port_features(string, port->curr);
+      }
+      if (port->advertised) {
+          ds_put_format(string, "     advertised: ");
+          ofp_print_port_features(string, port->advertised);
+      }
+      if (port->supported) {
+          ds_put_format(string, "     supported:  ");
+          ofp_print_port_features(string, port->supported);
+      }
+      if (port->peer) {
+          ds_put_format(string, "     peer:       ");
+          ofp_print_port_features(string, port->peer);
+      }
+      ds_put_format(string, "     speed: %"PRIu32" Mbps now, "
+                    "%"PRIu32" Mbps max\n",
+                    port->curr_speed / UINT32_C(1000),
+                    port->max_speed / UINT32_C(1000));
     }
-    if (port->advertised) {
-        ds_put_format(string, "     advertised: ");
-        ofp_print_port_features(string, port->advertised);
+
+    if (port->has_recirculate) {
+      ds_put_cstr(string, "     recirculate port: ");
+      ofputil_format_port(port->peer_port_no, string);
+      ds_put_char(string, '\n');
     }
-    if (port->supported) {
-        ds_put_format(string, "     supported:  ");
-        ofp_print_port_features(string, port->supported);
-    }
-    if (port->peer) {
-        ds_put_format(string, "     peer:       ");
-        ofp_print_port_features(string, port->peer);
-    }
-    ds_put_format(string, "     speed: %"PRIu32" Mbps now, "
-                  "%"PRIu32" Mbps max\n",
-                  port->curr_speed / UINT32_C(1000),
-                  port->max_speed / UINT32_C(1000));
 }
 
 /* Given a buffer 'b' that contains an array of OpenFlow ports of type

@@ -484,13 +484,20 @@ enum ofputil_port_state {
     OFPUTIL_PS_STP_MASK    = 3 << 8  /* Bit mask for OFPPS10_STP_* values. */
 };
 
-/* Abstract ofp10_phy_port or ofp11_port. */
+/* Abstract ofp10_phy_port or ofp11_port or ofp14_port. */
+/* Used for physical ports and logical ports (tun/patch), despite the name. */
 struct ofputil_phy_port {
     ofp_port_t port_no;
     uint8_t hw_addr[OFP_ETH_ALEN];
     char name[OFP_MAX_PORT_NAME_LEN];
     enum ofputil_port_config config;
     enum ofputil_port_state state;
+
+    /* Fields below are optional in OF 1.4+, so flag if they are present. */
+    int	has_ethernet:1,
+        has_recirculate:1;
+
+    /* -- Included in ofp10_phy_port or ofp11_port or OFPPDPT14_ETHERNET -- */
 
     /* NETDEV_F_* feature bitmasks. */
     enum netdev_features curr;       /* Current features. */
@@ -501,6 +508,9 @@ struct ofputil_phy_port {
     /* Speed. */
     uint32_t curr_speed;        /* Current speed, in kbps. */
     uint32_t max_speed;         /* Maximum supported speed, in kbps. */
+
+    /* -- Included in OFPPDPT15_RECIRCULATE (not used before OF 1.5) -- */
+    ofp_port_t peer_port_no;    /* Only for patch ports. */
 };
 
 enum ofputil_capabilities {

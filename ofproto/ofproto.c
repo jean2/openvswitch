@@ -33,6 +33,7 @@
 #include "hmap.h"
 #include "meta-flow.h"
 #include "netdev.h"
+#include "netdev-vport.h"
 #include "nx-match.h"
 #include "ofp-actions.h"
 #include "ofp-errors.h"
@@ -2141,10 +2142,36 @@ ofport_open(struct ofproto *ofproto,
     netdev_get_flags(netdev, &flags);
     pp->config = flags & NETDEV_UP ? 0 : OFPUTIL_PC_PORT_DOWN;
     pp->state = netdev_get_carrier(netdev) ? 0 : OFPUTIL_PS_LINK_DOWN;
-    netdev_get_features(netdev, &pp->curr, &pp->advertised,
-                        &pp->supported, &pp->peer);
+    error = netdev_get_features(netdev, &pp->curr, &pp->advertised,
+                                &pp->supported, &pp->peer);
+    pp->has_ethernet = (!error) ? 1 : 0;
     pp->curr_speed = netdev_features_to_bps(pp->curr, 0) / 1000;
     pp->max_speed = netdev_features_to_bps(pp->supported, 0) / 1000;
+
+    pp->has_recirculate = 0;
+    /* Unfortunately, we can't use port_get_recirculate_peer(() from here.
+     * It would be better because port type agnostic...
+     * Or maybe we should do it dynamically in append_port_desc() ?
+     * Jean II */
+    if (netdev_vport_is_patch(netdev)) {
+        char *peer_name;
+        struct ofport *peer_ofport;
+        peer_name = netdev_vport_patch_peer(netdev);
+        if (peer_name) {
+            /* Search only this ofproto, we care only about patch ports that
+             * recirculate. Jean II */
+            peer_ofport = shash_find_data(&ofproto->port_by_name, peer_name);
+            if (peer_ofport) {
+                pp->peer_port_no = peer_ofport->ofp_port;
+                pp->has_recirculate = 1;
+                /* Our partner may have been initialised before we got added
+                 * to the ofproto, so tell him we arrived. Jean II */
+                peer_ofport->pp.peer_port_no = pp->port_no;
+                peer_ofport->pp.has_recirculate = 1;
+            }
+        }
+        free(peer_name);
+    }
 
     return netdev;
 }
@@ -2159,12 +2186,15 @@ ofport_equal(const struct ofputil_phy_port *a,
     return (eth_addr_equals(a->hw_addr, b->hw_addr)
             && a->state == b->state
             && !((a->config ^ b->config) & OFPUTIL_PC_PORT_DOWN)
+            && a->has_ethernet == b->has_ethernet
             && a->curr == b->curr
             && a->advertised == b->advertised
             && a->supported == b->supported
             && a->peer == b->peer
             && a->curr_speed == b->curr_speed
-            && a->max_speed == b->max_speed);
+            && a->max_speed == b->max_speed
+            && a->has_recirculate == b->has_recirculate
+            && a->peer_port_no == b->peer_port_no);
 }
 
 /* Adds an ofport to 'p' initialized based on the given 'netdev' and 'opp'.
@@ -2248,12 +2278,17 @@ ofport_modified(struct ofport *port, struct ofputil_phy_port *pp)
                         | (pp->config & OFPUTIL_PC_PORT_DOWN));
     port->pp.state = ((port->pp.state & ~OFPUTIL_PS_LINK_DOWN)
                       | (pp->state & OFPUTIL_PS_LINK_DOWN));
+
+    port->pp.has_ethernet = pp->has_ethernet;
     port->pp.curr = pp->curr;
     port->pp.advertised = pp->advertised;
     port->pp.supported = pp->supported;
     port->pp.peer = pp->peer;
     port->pp.curr_speed = pp->curr_speed;
     port->pp.max_speed = pp->max_speed;
+
+    port->pp.has_recirculate = pp->has_recirculate;
+    port->pp.peer_port_no = pp->peer_port_no;
 
     connmgr_send_port_status(port->ofproto->connmgr, NULL,
                              &port->pp, OFPPR_MODIFY);

@@ -3713,6 +3713,9 @@ ofputil_decode_ofp10_phy_port(struct ofputil_phy_port *pp,
     pp->config = ntohl(opp->config) & OFPPC10_ALL;
     pp->state = ntohl(opp->state) & OFPPS10_ALL;
 
+    pp->has_ethernet = 1;
+    pp->has_recirculate = 0;
+
     pp->curr = netdev_port_features_from_ofp10(opp->curr);
     pp->advertised = netdev_port_features_from_ofp10(opp->advertised);
     pp->supported = netdev_port_features_from_ofp10(opp->supported);
@@ -3740,6 +3743,9 @@ ofputil_decode_ofp11_port(struct ofputil_phy_port *pp,
     pp->config = ntohl(op->config) & OFPPC11_ALL;
     pp->state = ntohl(op->state) & OFPPS11_ALL;
 
+    pp->has_ethernet = 1;
+    pp->has_recirculate = 0;
+
     pp->curr = netdev_port_features_from_ofp11(op->curr);
     pp->advertised = netdev_port_features_from_ofp11(op->advertised);
     pp->supported = netdev_port_features_from_ofp11(op->supported);
@@ -3761,6 +3767,7 @@ parse_ofp14_port_ethernet_property(const struct ofpbuf *payload,
         return OFPERR_OFPBPC_BAD_LEN;
     }
 
+    pp->has_ethernet = 1;
     pp->curr = netdev_port_features_from_ofp11(eth->curr);
     pp->advertised = netdev_port_features_from_ofp11(eth->advertised);
     pp->supported = netdev_port_features_from_ofp11(eth->supported);
@@ -3768,6 +3775,36 @@ parse_ofp14_port_ethernet_property(const struct ofpbuf *payload,
 
     pp->curr_speed = ntohl(eth->curr_speed);
     pp->max_speed = ntohl(eth->max_speed);
+
+    return 0;
+}
+
+static enum ofperr
+parse_ofp15_port_recirculate_property(const struct ofpbuf *payload,
+                                      struct ofputil_phy_port *pp)
+{
+    struct ofp15_port_desc_prop_recirculate *recir = ofpbuf_data(payload);
+    enum ofperr error;
+
+    if (ofpbuf_size(payload) < sizeof *recir) {
+        /* I assume this is probably already checked before. Jean II */
+        return OFPERR_OFPBPC_BAD_LEN;
+    }
+    if (ofpbuf_size(payload) < (sizeof *recir) + 4) {
+        /* Empty property : valid, but useless, so ignore... Jean II */
+        return 0;
+    }
+    if (ofpbuf_size(payload) > (sizeof *recir) + 4) {
+        /* More than one port : this is so unlikely, don't bother to
+         * extract the additional ports, just warn... Jean II */
+        VLOG_WARN("OFPPDPT15_RECIRCULATE: more than one port");
+    }
+
+    error = ofputil_port_from_ofp11(recir->port_nos[0], &pp->peer_port_no);
+    if (error) {
+        return error;
+    }
+    pp->has_recirculate = 1;
 
     return 0;
 }
@@ -3794,6 +3831,8 @@ ofputil_pull_ofp14_port(struct ofputil_phy_port *pp, struct ofpbuf *msg)
 
     error = ofputil_port_from_ofp11(op->port_no, &pp->port_no);
     if (error) {
+        /* If we use ovs-ofctl on a non-OVS switch that use logical ports,
+         * this error may trigger for valid OF replies. Jean II */
         return error;
     }
     memcpy(pp->hw_addr, op->hw_addr, OFP_ETH_ALEN);
@@ -3801,6 +3840,9 @@ ofputil_pull_ofp14_port(struct ofputil_phy_port *pp, struct ofpbuf *msg)
 
     pp->config = ntohl(op->config) & OFPPC11_ALL;
     pp->state = ntohl(op->state) & OFPPS11_ALL;
+
+    pp->has_ethernet = 0;
+    pp->has_recirculate = 0;
 
     while (ofpbuf_size(&properties) > 0) {
         struct ofpbuf payload;
@@ -3815,6 +3857,10 @@ ofputil_pull_ofp14_port(struct ofputil_phy_port *pp, struct ofpbuf *msg)
         switch (type) {
         case OFPPDPT14_ETHERNET:
             error = parse_ofp14_port_ethernet_property(&payload, pp);
+            break;
+
+        case OFPPDPT15_RECIRCULATE:
+            error = parse_ofp15_port_recirculate_property(&payload, pp);
             break;
 
         default:
@@ -3878,26 +3924,42 @@ ofputil_put_ofp14_port(const struct ofputil_phy_port *pp,
 {
     struct ofp14_port *op;
     struct ofp14_port_desc_prop_ethernet *eth;
+    struct ofp15_port_desc_prop_recirculate *recir;
+    size_t len = sizeof *op;
 
-    ofpbuf_prealloc_tailroom(b, sizeof *op + sizeof *eth);
+    if (pp->has_ethernet)
+        len += sizeof *eth;
+    if (pp->has_recirculate)
+        len += sizeof *recir + 4;
+
+    ofpbuf_prealloc_tailroom(b, len);
 
     op = ofpbuf_put_zeros(b, sizeof *op);
     op->port_no = ofputil_port_to_ofp11(pp->port_no);
-    op->length = htons(sizeof *op + sizeof *eth);
+    op->length = htons(len);
     memcpy(op->hw_addr, pp->hw_addr, ETH_ADDR_LEN);
     ovs_strlcpy(op->name, pp->name, sizeof op->name);
     op->config = htonl(pp->config & OFPPC11_ALL);
     op->state = htonl(pp->state & OFPPS11_ALL);
 
-    eth = ofpbuf_put_zeros(b, sizeof *eth);
-    eth->type = htons(OFPPDPT14_ETHERNET);
-    eth->length = htons(sizeof *eth);
-    eth->curr = netdev_port_features_to_ofp11(pp->curr);
-    eth->advertised = netdev_port_features_to_ofp11(pp->advertised);
-    eth->supported = netdev_port_features_to_ofp11(pp->supported);
-    eth->peer = netdev_port_features_to_ofp11(pp->peer);
-    eth->curr_speed = htonl(pp->curr_speed);
-    eth->max_speed = htonl(pp->max_speed);
+    if (pp->has_ethernet) {
+        eth = ofpbuf_put_zeros(b, sizeof *eth);
+        eth->type = htons(OFPPDPT14_ETHERNET);
+        eth->length = htons(sizeof *eth);
+        eth->curr = netdev_port_features_to_ofp11(pp->curr);
+        eth->advertised = netdev_port_features_to_ofp11(pp->advertised);
+        eth->supported = netdev_port_features_to_ofp11(pp->supported);
+        eth->peer = netdev_port_features_to_ofp11(pp->peer);
+        eth->curr_speed = htonl(pp->curr_speed);
+        eth->max_speed = htonl(pp->max_speed);
+    }
+
+    if (pp->has_recirculate) {
+        recir = ofpbuf_put_zeros(b, (sizeof *recir) + 4);
+        recir->type = htons(OFPPDPT15_RECIRCULATE);
+        recir->length = htons((sizeof *recir) + 4);
+        recir->port_nos[0] = ofputil_port_to_ofp11(pp->peer_port_no);
+    }
 }
 
 static void

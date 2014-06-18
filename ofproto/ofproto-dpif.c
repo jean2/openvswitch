@@ -3046,6 +3046,20 @@ port_is_lacp_current(const struct ofport *ofport_)
             ? lacp_slave_is_current(ofport->bundle->lacp, ofport)
             : -1);
 }
+
+static ofp_port_t
+port_get_recirculate_peer(const struct ofport *ofport_)
+{
+    const struct ofport_dpif *ofport = ofport_dpif_cast(ofport_);
+    /* Check if the port has a peer. */
+    if (ofport->peer) {
+        /* Check that they belong to the same datapath. */
+        if (ofport->up.ofproto == ofport->peer->up.ofproto) {
+            return ofport->peer->up.ofp_port;
+        }
+    }
+    return OFPP_ANY;
+}
 
 /* If 'rule' is an OpenFlow rule, that has expired according to OpenFlow rules,
  * then delete it entirely. */
@@ -4893,6 +4907,7 @@ const struct ofproto_class ofproto_dpif_class = {
     port_poll,
     port_poll_wait,
     port_is_lacp_current,
+    port_get_recirculate_peer,
     NULL,                       /* rule_choose_table */
     rule_alloc,
     rule_construct,
