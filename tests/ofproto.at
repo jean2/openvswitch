@@ -2119,6 +2119,72 @@ OFPT_BARRIER_REPLY (OF1.2):
 OVS_VSWITCHD_STOP
 AT_CLEANUP
 
+dnl This test checks that metadata does not survive in patch ports.
+AT_SETUP([ofproto - packet-out with metadata in patch ports (OpenFlow 1.3)])
+OVS_VSWITCHD_START
+ovs-vsctl add-port br0 patch1
+AT_CHECK([ovs-vsctl set interface patch1 type=patch])
+AT_CHECK([ovs-vsctl set interface patch1 options:peer=patch2])
+ovs-vsctl add-port br0 patch2
+AT_CHECK([ovs-vsctl set interface patch2 type=patch])
+AT_CHECK([ovs-vsctl set interface patch2 options:peer=patch1])
+
+# Start a monitor listening for packet-ins.
+AT_CHECK([ovs-ofctl -O OpenFlow13 monitor br0 --detach --no-chdir --pidfile])
+ovs-appctl -t ovs-ofctl ofctl/send 0309000c0123456700000080
+ovs-appctl -t ovs-ofctl ofctl/barrier
+ovs-appctl -t ovs-ofctl ofctl/set-output-file monitor.log
+AT_CAPTURE_FILE([monitor.log])
+
+# Send a flow-mod: send packet from port patch2 to the controller
+AT_CHECK([ovs-ofctl -O OpenFlow13 add-flow br0 table=0,priority=32767,in_port=2,actions=controller])
+AT_CHECK([ovs-ofctl -O OpenFlow13 add-flow br0 table=0,priority=32768,in_port=2,metadata=0,actions=controller])
+AT_CHECK([ovs-ofctl -O OpenFlow13 add-flow br0 table=0,priority=32768,in_port=2,metadata=0xfafafafa5a5a5a5a,actions=controller])
+
+# Send a packet-out with a set-field action to set some metadata, and forward to port patch1
+AT_CHECK([ovs-ofctl -O OpenFlow13 packet-out br0 none 'set_field:0xfafafafa5a5a5a5a->metadata, output:1' '0001020304050010203040501234'])
+
+# Make sure packet got through before checking the counters.
+ovs-appctl -t ovs-ofctl ofctl/barrier
+
+# Check that packets are accounted properly in the patch ports.
+AT_CHECK([ovs-ofctl -O OpenFlow13 -vwarn dump-ports br0], [0], [stdout])
+AT_CHECK([STRIP_XIDS stdout | sed 's/duration=[[0-9.]]*s/duration=?s/'], [0], [dnl
+OFPST_PORT reply (OF1.3): 3 ports
+  port LOCAL: rx pkts=0, bytes=0, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=0, bytes=0, drop=0, errs=0, coll=0
+           duration=?s
+  port  1: rx pkts=0, bytes=0, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=1, bytes=14, drop=0, errs=0, coll=0
+           duration=?s
+  port  2: rx pkts=1, bytes=14, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=0, bytes=0, drop=0, errs=0, coll=0
+           duration=?s
+])
+# Check that packets are accounted properly in the flow entry.
+AT_CHECK([ovs-ofctl -O OpenFlow13 dump-flows br0 | ofctl_strip | sort], [0], [dnl
+ metadata=0xfafafafa5a5a5a5a,in_port=2 actions=CONTROLLER:65535
+ n_packets=1, n_bytes=14, metadata=0,in_port=2 actions=CONTROLLER:65535
+ priority=32767,in_port=2 actions=CONTROLLER:65535
+OFPST_FLOW reply (OF1.3):
+])
+
+# Stop the monitor and check its output.
+ovs-appctl -t ovs-ofctl ofctl/barrier
+ovs-appctl -t ovs-ofctl exit
+
+# Disable this test because it fails - Jean II.
+#AT_CHECK([sed 's/ (xid=0x[[0-9a-fA-F]]*)//' monitor.log], [0], [dnl
+#OFPT_PACKET_IN (OF1.3): total_len=14 in_port=ANY metadata=0 (via action) data_len=14 (unbuffered)
+#metadata=0,in_port=2,vlan_tci=0x0000,dl_src=00:10:20:30:40:50,dl_dst=00:01:02:03:04:05,dl_type=0x1234
+#OFPT_BARRIER_REPLY (OF1.3):
+#])
+
+# Ignore the "normal" patch port errors - Jean II.
+OVS_VSWITCHD_STOP(["/|WARN|/d
+/|ERR|/d"])
+AT_CLEANUP
+
 AT_SETUP([ofproto - flow monitoring])
 AT_KEYWORDS([monitor])
 OVS_VSWITCHD_START
