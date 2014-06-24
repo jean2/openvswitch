@@ -2119,7 +2119,7 @@ OFPT_BARRIER_REPLY (OF1.2):
 OVS_VSWITCHD_STOP
 AT_CLEANUP
 
-dnl This test checks that metadata does not survive in patch ports.
+dnl This test checks that metadata is handled properly in patch ports.
 AT_SETUP([ofproto - packet-out with metadata in patch ports (OpenFlow 1.3)])
 OVS_VSWITCHD_START
 ovs-vsctl add-port br0 patch1
@@ -2141,7 +2141,7 @@ AT_CHECK([ovs-ofctl -O OpenFlow13 add-flow br0 table=0,priority=32767,in_port=2,
 AT_CHECK([ovs-ofctl -O OpenFlow13 add-flow br0 table=0,priority=32768,in_port=2,metadata=0,actions=controller])
 AT_CHECK([ovs-ofctl -O OpenFlow13 add-flow br0 table=0,priority=32768,in_port=2,metadata=0xfafafafa5a5a5a5a,actions=controller])
 
-# Send a packet-out with a set-field action to set some metadata, and forward to port patch1
+# Send a packet-out with a set-field action to set metadata, and forward to port patch1
 AT_CHECK([ovs-ofctl -O OpenFlow13 packet-out br0 none 'set_field:0xfafafafa5a5a5a5a->metadata, output:1' '0001020304050010203040501234'])
 
 # Make sure packet got through before checking the counters.
@@ -2165,6 +2165,23 @@ OFPST_PORT reply (OF1.3): 3 ports
 AT_CHECK([ovs-ofctl -O OpenFlow13 dump-flows br0 | ofctl_strip | sort], [0], [dnl
  metadata=0xfafafafa5a5a5a5a,in_port=2 actions=CONTROLLER:65535
  n_packets=1, n_bytes=14, metadata=0,in_port=2 actions=CONTROLLER:65535
+ priority=32767,in_port=2 actions=CONTROLLER:65535
+OFPST_FLOW reply (OF1.3):
+])
+
+# Configure the patch port to preserve metadata.
+AT_CHECK([ovs-vsctl set interface patch1 options:peer=patch2 options:preserve_metadata=1])
+
+# Send a packet-out with a set-field action to set metadata, and forward to port patch1
+AT_CHECK([ovs-ofctl -O OpenFlow13 packet-out br0 none 'set_field:0xfafafafa5a5a5a5a->metadata, output:1' '0001020304050010203040501234'])
+
+# Make sure packet got through before checking the counters.
+ovs-appctl -t ovs-ofctl ofctl/barrier
+
+# Check that packets are accounted properly in the flow entry.
+AT_CHECK([ovs-ofctl -O OpenFlow13 dump-flows br0 | ofctl_strip | sort], [0], [dnl
+ n_packets=1, n_bytes=14, metadata=0,in_port=2 actions=CONTROLLER:65535
+ n_packets=1, n_bytes=14, metadata=0xfafafafa5a5a5a5a,in_port=2 actions=CONTROLLER:65535
  priority=32767,in_port=2 actions=CONTROLLER:65535
 OFPST_FLOW reply (OF1.3):
 ])

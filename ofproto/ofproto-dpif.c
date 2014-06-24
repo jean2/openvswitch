@@ -156,6 +156,7 @@ struct ofport_dpif {
     bool is_layer3;             /* This is a layer 3 port. */
     long long int carrier_seq;  /* Carrier status changes. */
     struct ofport_dpif *peer;   /* Peer if patch port. */
+    bool preserve_metadata;     /* Patch port preserve metadata. */
 
     /* Spanning tree. */
     struct stp_port *stp_port;  /* Spanning Tree Protocol, if any. */
@@ -616,7 +617,8 @@ type_run(const char *type)
                 xlate_ofport_set(ofproto, ofport->bundle, ofport,
                                  ofport->up.ofp_port, ofport->odp_port,
                                  ofport->up.netdev, ofport->cfm,
-                                 ofport->bfd, ofport->peer, stp_port,
+                                 ofport->bfd, ofport->peer,
+                                 ofport->preserve_metadata, stp_port,
                                  ofport->qdscp, ofport->n_qdscp,
                                  ofport->up.pp.config, ofport->up.pp.state,
                                  ofport->is_tunnel, ofport->may_enable);
@@ -1569,6 +1571,7 @@ port_construct(struct ofport *port_)
     port->stp_state = STP_DISABLED;
     port->is_tunnel = false;
     port->peer = NULL;
+    port->preserve_metadata = false;
     port->qdscp = NULL;
     port->n_qdscp = 0;
     port->realdev_ofp_port = 0;
@@ -2727,6 +2730,8 @@ ofport_update_peer(struct ofport_dpif *ofport)
         ofport->peer->peer = NULL;
         ofport->peer = NULL;
     }
+
+    ofport->preserve_metadata = netdev_vport_patch_preserve_metadata(ofport->up.netdev);
 
     peer_name = netdev_vport_patch_peer(ofport->up.netdev);
     if (!peer_name) {

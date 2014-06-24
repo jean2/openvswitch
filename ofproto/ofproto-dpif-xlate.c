@@ -141,6 +141,7 @@ struct xport {
 
     struct xbridge *xbridge;         /* Parent bridge. */
     struct xport *peer;              /* Patch port peer or null. */
+    bool preserve_metadata;          /* Patch port preserve metadata. */
 
     enum ofputil_port_config config; /* OpenFlow port configuration. */
     enum ofputil_port_state state;   /* OpenFlow port state. */
@@ -494,7 +495,8 @@ xlate_ofport_set(struct ofproto_dpif *ofproto, struct ofbundle *ofbundle,
                  struct ofport_dpif *ofport, ofp_port_t ofp_port,
                  odp_port_t odp_port, const struct netdev *netdev,
                  const struct cfm *cfm, const struct bfd *bfd,
-                 struct ofport_dpif *peer, int stp_port_no,
+                 struct ofport_dpif *peer, bool preserve_metadata,
+                 int stp_port_no,
                  const struct ofproto_port_queue *qdscp_list, size_t n_qdscp,
                  enum ofputil_port_config config,
                  enum ofputil_port_state state, bool is_tunnel,
@@ -546,6 +548,7 @@ xlate_ofport_set(struct ofproto_dpif *ofproto, struct ofbundle *ofbundle,
     if (xport->peer) {
         xport->peer->peer = xport;
     }
+    xport->preserve_metadata = preserve_metadata;
 
     if (xport->xbundle) {
         list_remove(&xport->bundle_node);
@@ -1848,8 +1851,10 @@ compose_output_action__(struct xlate_ctx *ctx, ofp_port_t ofp_port,
 
         ctx->xbridge = peer->xbridge;
         flow->in_port.ofp_port = peer->ofp_port;
-        flow->metadata = htonll(0);
-        memset(&flow->tunnel, 0, sizeof flow->tunnel);
+        if (!xport->preserve_metadata) {
+            flow->metadata = htonll(0);
+            memset(&flow->tunnel, 0, sizeof flow->tunnel);
+	}
         memset(flow->regs, 0, sizeof flow->regs);
 
         special = process_special(ctx, &ctx->xin->flow, peer,

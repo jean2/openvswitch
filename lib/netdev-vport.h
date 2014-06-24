@@ -33,6 +33,7 @@ bool netdev_vport_is_patch(const struct netdev *);
 bool netdev_vport_is_layer3(const struct netdev *);
 
 char *netdev_vport_patch_peer(const struct netdev *netdev);
+bool netdev_vport_patch_preserve_metadata(const struct netdev *netdev);
 
 void netdev_vport_inc_rx(const struct netdev *,
                          const struct dpif_flow_stats *);

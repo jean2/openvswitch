@@ -63,6 +63,7 @@ struct netdev_vport {
 
     /* Patch Ports. */
     char *peer;
+    bool preserve_metadata;
 };
 
 struct vport_class {
@@ -666,6 +667,25 @@ netdev_vport_patch_peer(const struct netdev *netdev_)
     return peer;
 }
 
+/* If 'netdev' is a patch port, returns if the port should preserve metadata.
+ *
+ * If 'netdev' is not a patch port, returns NULL. */
+bool
+netdev_vport_patch_preserve_metadata(const struct netdev *netdev_)
+{
+    bool preserve_metadata = false;
+
+    if (netdev_vport_is_patch(netdev_)) {
+        struct netdev_vport *netdev = netdev_vport_cast(netdev_);
+
+        ovs_mutex_lock(&netdev->mutex);
+        preserve_metadata = netdev->preserve_metadata;
+        ovs_mutex_unlock(&netdev->mutex);
+    }
+
+    return preserve_metadata;
+}
+
 void
 netdev_vport_inc_rx(const struct netdev *netdev,
                     const struct dpif_flow_stats *stats)
@@ -703,6 +723,9 @@ get_patch_config(const struct netdev *dev_, struct smap *args)
     if (dev->peer) {
         smap_add(args, "peer", dev->peer);
     }
+    if (dev->preserve_metadata) {
+        smap_add(args, "preserve_metadata", "1");
+    }
     ovs_mutex_unlock(&dev->mutex);
 
     return 0;
@@ -714,6 +737,7 @@ set_patch_config(struct netdev *dev_, const struct smap *args)
     struct netdev_vport *dev = netdev_vport_cast(dev_);
     const char *name = netdev_get_name(dev_);
     const char *peer;
+    int preserve_metadata;
 
     peer = smap_get(args, "peer");
     if (!peer) {
@@ -721,7 +745,11 @@ set_patch_config(struct netdev *dev_, const struct smap *args)
         return EINVAL;
     }
 
-    if (smap_count(args) > 1) {
+    preserve_metadata = smap_get_int(args, "preserve_metadata", 0);
+    /* Because it uses atoi(), it's useless to check if the result is
+     * really a boolean, another number or a random string. Jean II */
+
+    if (smap_count(args) > 2) {
         VLOG_ERR("%s: patch type takes only a 'peer' argument", name);
         return EINVAL;
     }
@@ -734,6 +762,7 @@ set_patch_config(struct netdev *dev_, const struct smap *args)
     ovs_mutex_lock(&dev->mutex);
     free(dev->peer);
     dev->peer = xstrdup(peer);
+    dev->preserve_metadata = preserve_metadata;
     netdev_change_seq_changed(dev_);
     ovs_mutex_unlock(&dev->mutex);
 
