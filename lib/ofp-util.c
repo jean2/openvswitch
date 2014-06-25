@@ -55,6 +55,12 @@ struct ofp_prop_header {
     ovs_be16 len;
 };
 
+static enum ofperr
+parse_oxms(struct ofpbuf *payload, bool loose,
+           uint64_t *exactp, uint64_t *maskedp);
+static int
+encode_oxms(struct ofpbuf *payload, uint64_t exact, uint64_t masked);
+
 /* Pulls a property, beginning with struct ofp_prop_header, from the beginning
  * of 'msg'.  Stores the type of the property in '*typep' and, if 'property' is
  * nonnull, the entire property, including the header, in '*property'.  Returns
@@ -3724,6 +3730,9 @@ ofputil_decode_ofp10_phy_port(struct ofputil_phy_port *pp,
     pp->curr_speed = netdev_features_to_bps(pp->curr, 0) / 1000;
     pp->max_speed = netdev_features_to_bps(pp->supported, 0) / 1000;
 
+    pp->pipeline_input = 0LL;
+    pp->pipeline_output = 0LL;
+
     return 0;
 }
 
@@ -3753,6 +3762,9 @@ ofputil_decode_ofp11_port(struct ofputil_phy_port *pp,
 
     pp->curr_speed = ntohl(op->curr_speed);
     pp->max_speed = ntohl(op->max_speed);
+
+    pp->pipeline_input = 0LL;
+    pp->pipeline_output = 0LL;
 
     return 0;
 }
@@ -3843,6 +3855,8 @@ ofputil_pull_ofp14_port(struct ofputil_phy_port *pp, struct ofpbuf *msg)
 
     pp->has_ethernet = 0;
     pp->has_recirculate = 0;
+    pp->pipeline_input = 0LL;
+    pp->pipeline_output = 0LL;
 
     while (ofpbuf_size(&properties) > 0) {
         struct ofpbuf payload;
@@ -3857,6 +3871,16 @@ ofputil_pull_ofp14_port(struct ofputil_phy_port *pp, struct ofpbuf *msg)
         switch (type) {
         case OFPPDPT14_ETHERNET:
             error = parse_ofp14_port_ethernet_property(&payload, pp);
+            break;
+
+        case OFPPDPT15_PIPELINE_INPUT:
+            ofpbuf_pull(&payload, sizeof(struct ofp_prop_header));
+            error = parse_oxms(&payload, true, &pp->pipeline_input, NULL);
+            break;
+
+        case OFPPDPT15_PIPELINE_OUTPUT:
+            ofpbuf_pull(&payload, sizeof(struct ofp_prop_header));
+            error = parse_oxms(&payload, true, &pp->pipeline_output, NULL);
             break;
 
         case OFPPDPT15_RECIRCULATE:
@@ -3923,26 +3947,21 @@ ofputil_put_ofp14_port(const struct ofputil_phy_port *pp,
                        struct ofpbuf *b)
 {
     struct ofp14_port *op;
-    struct ofp14_port_desc_prop_ethernet *eth;
-    struct ofp15_port_desc_prop_recirculate *recir;
-    size_t len = sizeof *op;
+    size_t start_port_len = ofpbuf_size(b);
+    size_t port_len = sizeof *op;
 
-    if (pp->has_ethernet)
-        len += sizeof *eth;
-    if (pp->has_recirculate)
-        len += sizeof *recir + 4;
-
-    ofpbuf_prealloc_tailroom(b, len);
+    ofpbuf_prealloc_tailroom(b, port_len + sizeof(struct ofp14_port_desc_prop_ethernet));
 
     op = ofpbuf_put_zeros(b, sizeof *op);
     op->port_no = ofputil_port_to_ofp11(pp->port_no);
-    op->length = htons(len);
+    op->length = htons(port_len);
     memcpy(op->hw_addr, pp->hw_addr, ETH_ADDR_LEN);
     ovs_strlcpy(op->name, pp->name, sizeof op->name);
     op->config = htonl(pp->config & OFPPC11_ALL);
     op->state = htonl(pp->state & OFPPS11_ALL);
 
     if (pp->has_ethernet) {
+        struct ofp14_port_desc_prop_ethernet *eth;
         eth = ofpbuf_put_zeros(b, sizeof *eth);
         eth->type = htons(OFPPDPT14_ETHERNET);
         eth->length = htons(sizeof *eth);
@@ -3952,14 +3971,52 @@ ofputil_put_ofp14_port(const struct ofputil_phy_port *pp,
         eth->peer = netdev_port_features_to_ofp11(pp->peer);
         eth->curr_speed = htonl(pp->curr_speed);
         eth->max_speed = htonl(pp->max_speed);
+        port_len += sizeof *eth;
+    }
+
+    if (pp->pipeline_input) {
+        struct ofp15_port_desc_prop_oxm *pipein;
+        size_t start_pipe_len = ofpbuf_size(b);
+        int pipe_len;
+
+        ofpbuf_put_uninit(b, sizeof *pipein);
+        pipe_len = (encode_oxms(b, pp->pipeline_input, 0LL)
+                    + sizeof *pipein);
+        ofpbuf_put_zeros(b, PAD_SIZE(pipe_len, 8));
+
+        pipein = ofpbuf_at(b, start_pipe_len, sizeof *pipein);
+        pipein->type = htons(OFPPDPT15_PIPELINE_INPUT);
+        pipein->length = htons(pipe_len);
+	port_len += pipe_len + PAD_SIZE(pipe_len, 8);
+    }
+
+    if (pp->pipeline_output) {
+        struct ofp15_port_desc_prop_oxm *pipein;
+        size_t start_pipe_len = ofpbuf_size(b);
+        int pipe_len;
+
+        ofpbuf_put_uninit(b, sizeof *pipein);
+        pipe_len = (encode_oxms(b, pp->pipeline_output, 0LL)
+                    + sizeof *pipein);
+        ofpbuf_put_zeros(b, PAD_SIZE(pipe_len, 8));
+
+        pipein = ofpbuf_at(b, start_pipe_len, sizeof *pipein);
+        pipein->type = htons(OFPPDPT15_PIPELINE_OUTPUT);
+        pipein->length = htons(pipe_len);
+	port_len += pipe_len + PAD_SIZE(pipe_len, 8);
     }
 
     if (pp->has_recirculate) {
+        struct ofp15_port_desc_prop_recirculate *recir;
         recir = ofpbuf_put_zeros(b, (sizeof *recir) + 4);
         recir->type = htons(OFPPDPT15_RECIRCULATE);
         recir->length = htons((sizeof *recir) + 4);
         recir->port_nos[0] = ofputil_port_to_ofp11(pp->peer_port_no);
+        port_len += sizeof *recir + 4;
     }
+
+    op = ofpbuf_at(b, start_port_len, sizeof *op);
+    op->length = htons(port_len);
 }
 
 static void
@@ -4829,6 +4886,34 @@ ofputil_decode_table_features(struct ofpbuf *msg,
     tf->wildcard |= tf->mask;
 
     return 0;
+}
+
+static int
+encode_oxms(struct ofpbuf *payload, uint64_t exact, uint64_t masked)
+{
+    const size_t start_len = ofpbuf_size(payload);
+    int oxms_len;
+    int i;
+
+    for (i = 0; i < MFF_N_IDS; i++) {
+        uint64_t bit = UINT64_C(1) << i;
+
+        if (exact & bit) {
+            const struct mf_field *f = mf_from_id(i);
+	    uint32_t oxm_header = f->oxm_header;
+            ovs_be32 n_header;
+
+            if (masked & bit) {
+                oxm_header |= 1 << 8;
+            }
+
+            n_header = htonl(oxm_header);
+            ofpbuf_put(payload, &n_header, sizeof n_header);
+        }
+    }
+
+    oxms_len = ofpbuf_size(payload) - start_len;
+    return oxms_len;
 }
 
 /* Encodes and returns a request to obtain the table features of a switch.

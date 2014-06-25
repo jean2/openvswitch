@@ -48,6 +48,8 @@
 enum ofp_port_desc_prop_type {
     OFPPDPT14_ETHERNET          = 0,      /* Ethernet property. */
     OFPPDPT14_OPTICAL           = 1,      /* Optical property. */
+    OFPPDPT15_PIPELINE_INPUT    = 2,      /* Ingress pipeline fields. */
+    OFPPDPT15_PIPELINE_OUTPUT   = 3,      /* Egress pipeline fields. */
     OFPPDPT15_RECIRCULATE       = 4,      /* Recirculation property. */
     OFPPDPT14_EXPERIMENTER      = 0xFFFF, /* Experimenter property. */
 };

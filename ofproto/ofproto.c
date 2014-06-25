@@ -2149,6 +2149,8 @@ ofport_open(struct ofproto *ofproto,
     pp->max_speed = netdev_features_to_bps(pp->supported, 0) / 1000;
 
     pp->has_recirculate = 0;
+    pp->pipeline_input = 0LL;
+    pp->pipeline_output = 0LL;
     /* Unfortunately, we can't use port_get_recirculate_peer(() from here.
      * It would be better because port type agnostic...
      * Or maybe we should do it dynamically in append_port_desc() ?
@@ -2162,12 +2164,24 @@ ofport_open(struct ofproto *ofproto,
              * recirculate. Jean II */
             peer_ofport = shash_find_data(&ofproto->port_by_name, peer_name);
             if (peer_ofport) {
+                bool preserve_metadata = netdev_vport_patch_preserve_metadata(netdev);
                 pp->peer_port_no = peer_ofport->ofp_port;
                 pp->has_recirculate = 1;
                 /* Our partner may have been initialised before we got added
                  * to the ofproto, so tell him we arrived. Jean II */
                 peer_ofport->pp.peer_port_no = pp->port_no;
                 peer_ofport->pp.has_recirculate = 1;
+		/* Check if we preserve metadata. */
+		if (preserve_metadata) {
+		    pp->pipeline_input = UINT64_C(1) << MFF_METADATA | UINT64_C(1) << MFF_TUN_ID;
+		    peer_ofport->pp.pipeline_output = pp->pipeline_input;
+		}
+		/* Check if the peer preserve metadata. */
+		preserve_metadata = netdev_vport_patch_preserve_metadata(peer_ofport->netdev);
+		if (preserve_metadata) {
+		    pp->pipeline_output = UINT64_C(1) << MFF_METADATA | UINT64_C(1) << MFF_TUN_ID;
+		    peer_ofport->pp.pipeline_input = pp->pipeline_output;
+		}
             }
         }
         free(peer_name);
@@ -2193,6 +2207,8 @@ ofport_equal(const struct ofputil_phy_port *a,
             && a->peer == b->peer
             && a->curr_speed == b->curr_speed
             && a->max_speed == b->max_speed
+            && a->pipeline_input == b->pipeline_input
+            && a->pipeline_output == b->pipeline_output
             && a->has_recirculate == b->has_recirculate
             && a->peer_port_no == b->peer_port_no);
 }
@@ -2287,6 +2303,8 @@ ofport_modified(struct ofport *port, struct ofputil_phy_port *pp)
     port->pp.curr_speed = pp->curr_speed;
     port->pp.max_speed = pp->max_speed;
 
+    port->pp.pipeline_input = pp->pipeline_input;
+    port->pp.pipeline_output = pp->pipeline_output;
     port->pp.has_recirculate = pp->has_recirculate;
     port->pp.peer_port_no = pp->peer_port_no;
 

@@ -509,6 +509,10 @@ struct ofputil_phy_port {
     uint32_t curr_speed;        /* Current speed, in kbps. */
     uint32_t max_speed;         /* Maximum supported speed, in kbps. */
 
+    /* -- Included in OFPPDPT15_PIPELINE_INPUT (not used before OF 1.5) -- */
+    uint64_t pipeline_input;    /* Pipeline fields provided in input. */
+    /* -- Included in OFPPDPT15_PIPELINE_OUTPUT (not used before OF 1.5) -- */
+    uint64_t pipeline_output;   /* Pipeline fields provided in output. */
     /* -- Included in OFPPDPT15_RECIRCULATE (not used before OF 1.5) -- */
     ofp_port_t peer_port_no;    /* Only for patch ports. */
 };

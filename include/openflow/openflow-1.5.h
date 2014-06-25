@@ -44,6 +44,19 @@
 /* ## ofp15_port ## */
 /* ## ---------- ## */
 
+/* Ingress or egress pipeline fields. */
+struct ofp15_port_desc_prop_oxm {
+    ovs_be16         type;    /* One of OFPPDPT15_PIPELINE_INPUT or
+                                 OFPPDPT15_PIPELINE_OUTPUT. */
+    ovs_be16         length;  /* Length in bytes of this property. */
+    /* Followed by:
+     *   - Exactly (length - 4) bytes containing the oxm_ids, then
+     *   - Exactly (length + 7)/8*8 - (length) (between 0 and 7)
+     *     bytes of all-zero bytes */
+    ovs_be32         oxm_ids[0];   /* Array of OXM headers */
+};
+OFP_ASSERT(sizeof(struct ofp15_port_desc_prop_oxm) == 4);
+
 /* Recirculate port description property. */
 struct ofp15_port_desc_prop_recirculate {
     ovs_be16     type;          /* OFPPDPT15_RECIRCULATE. */

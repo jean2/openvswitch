@@ -412,6 +412,36 @@ ofp_print_phy_port(struct ds *string, const struct ofputil_phy_port *port)
                     port->max_speed / UINT32_C(1000));
     }
 
+    if (port->pipeline_input) {
+        int i;
+        ds_put_cstr(string, "     pipeline input:");
+        for (i = 0; i < MFF_N_IDS; i++) {
+            uint64_t bit = UINT64_C(1) << i;
+
+            if (port->pipeline_input & bit) {
+                const struct mf_field *f = mf_from_id(i);
+
+                ds_put_format(string, " %s", f->name);
+            }
+        }
+        ds_put_char(string, '\n');
+    }
+
+    if (port->pipeline_output) {
+        int i;
+        ds_put_cstr(string, "     pipeline output:");
+        for (i = 0; i < MFF_N_IDS; i++) {
+            uint64_t bit = UINT64_C(1) << i;
+
+            if (port->pipeline_output & bit) {
+                const struct mf_field *f = mf_from_id(i);
+
+                ds_put_format(string, " %s", f->name);
+            }
+        }
+        ds_put_char(string, '\n');
+    }
+
     if (port->has_recirculate) {
       ds_put_cstr(string, "     recirculate port: ");
       ofputil_format_port(port->peer_port_no, string);
