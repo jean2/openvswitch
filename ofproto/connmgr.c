@@ -489,6 +489,8 @@ connmgr_get_controller_info(struct connmgr *mgr, struct shash *info)
 
             smap_add(&cinfo->pairs, "state", rconn_get_state(rconn));
 
+            smap_add(&cinfo->pairs, "connection_uri", rconn_get_target(rconn));
+
             if (last_connection != TIME_MIN) {
                 smap_add_format(&cinfo->pairs, "sec_since_connect",
                                 "%ld", (long int) (now - last_connection));
@@ -937,10 +939,149 @@ ofconn_set_role(struct ofconn *ofconn, enum ofp12_controller_role role)
             if (other->role == OFPCR12_ROLE_MASTER) {
                 other->role = OFPCR12_ROLE_SLAVE;
                 ofconn_send_role_status(other, OFPCR12_ROLE_SLAVE, OFPCRR_MASTER_REQUEST);
+                
+                // The controller_status message is a new feature. It should not be run for
+                // any version below 6.
+                if (6 == rconn_get_version(ofconn->rconn)) {
+                    // inform controllers that this controller has been demoted to slave
+                    ofconn_setup_controller_status_async_send(other, OFPCSR_ROLE);
+                }
             }
         }
     }
     ofconn->role = role;
+  
+    // The controller_status message is a new feature. It should not be run for
+    // any version below 6.
+    if (6 == rconn_get_version(ofconn->rconn)) {
+        // inform controllers that this controller has been promoted to master
+        ofconn_setup_controller_status_async_send(ofconn, OFPCSR_ROLE);
+    }
+}
+
+/* Builds the OpenFlow header and loops through each connected controller. 
+ * Sends one asynchronous message per controller. */
+void
+ofconn_setup_controller_status_async_send(struct ofconn *ofconn, 
+                                          enum ofp_controller_status_reason reason)
+{
+    // FIXME: Correct method to build openflow header 
+    struct ofp_header *oh = (struct ofp_header*) malloc(sizeof (struct ofp_header*));
+    struct ofproto *ofproto;
+    struct connmgr *mgr;
+    struct ofconn *conn;
+   
+    // The controller_status message is a new feature. The header should set the
+    // version to the latest version.
+    oh->version = 6;
+    oh->xid = 0;
+
+    ofproto = ofconn_get_ofproto(ofconn);
+    mgr = ofproto->connmgr;
+    // TODO: change this so an async message isn't sent to a controller
+    // about itself.
+    LIST_FOR_EACH (conn, node, &mgr->all_conns) {
+        ofconn_send_controller_status_async(conn, oh, reason);
+    }
+
+    free(oh);
+}
+
+/* Builds and sends a controller status asynchronous message. */
+void
+ofconn_send_controller_status_async(struct ofconn *ofconn, const struct ofp_header *oh,
+                                    enum ofp_controller_status_reason reason)
+{
+    struct ofp_controller_status *status;
+    struct ofp_controller_status_prop_uri *properties;
+    struct ofpbuf *buf;
+    char   *conn_uri;
+    size_t prop_len;
+    struct rconn *rconn;
+    size_t padded_prop_len;
+
+    rconn = ofconn->rconn;
+    conn_uri = rconn_get_target(rconn);
+    prop_len = sizeof(struct ofp_controller_status_prop_uri) + strlen(conn_uri);
+    padded_prop_len = (prop_len + 7)/8*8;
+
+    buf = ofpraw_alloc_reply(OFPRAW_OFPT_CONTROLLER_STATUS_ASYNC, oh, sizeof *status + padded_prop_len);
+    
+    status = ofpbuf_put_zeros(buf, sizeof *status + padded_prop_len);
+    // fixme: setup and retrieve short_id. ofp_role_request establishes this (new feature).
+    status->short_id = htons(ofconn_get_controller_id(ofconn));
+    status->role = htonl(ofconn_get_role(ofconn));
+    status->reason = reason;
+    status->channel_status = rconn_is_connected(rconn);
+    memset(status->pad, 0, sizeof status->pad);
+
+    properties = status->properties;
+    properties->type = htons(OFPCSPT_URI);
+    properties->length = prop_len;
+    // Must subtract off type and length of properties to not overrun the buffer
+    memset(properties->uri, 0, padded_prop_len - sizeof(struct ofp_controller_status_prop_uri));
+    strcpy(properties->uri, conn_uri);
+
+    status->length = sizeof(*status) + properties->length;
+    // convert the lengths to network byte order after all lengths are calculated
+    status->length = htons(status->length);
+    properties->length = htons(properties->length);
+ 
+    ofconn_send(ofconn, buf, NULL);
+}
+
+/* Sends a controller status reply in response to a controller status request.
+ * Loops through all connected controllers and adds their status to the message. */
+void
+ofconn_send_controller_status_reply(struct ofconn *ofconn, const struct ofp_header *oh)
+{
+    struct ofproto *ofproto = ofconn_get_ofproto(ofconn);
+    struct ofp_controller_status *status;
+    struct ofp_controller_status_prop_uri *properties;
+    struct ofproto_controller_info *cinfo;
+    struct list replies;
+    struct shash info;
+    struct shash_node *node;
+    char   *conn_uri;
+    size_t prop_len;
+    size_t padded_prop_len;
+    struct ofpbuf *reply;
+
+    ofpmp_init(&replies, oh);
+    shash_init(&info);
+    connmgr_get_controller_info(ofproto->connmgr, &info);
+
+    SHASH_FOR_EACH (node, &info) {
+        cinfo  = node->data;
+        conn_uri = smap_get(&(cinfo->pairs), "connection_uri");
+        prop_len = sizeof(struct ofp_controller_status_prop_uri) + strlen(conn_uri);
+        padded_prop_len = (prop_len + 7)/8*8;
+
+        reply = ofpmp_reserve(&replies, sizeof *status + padded_prop_len);
+       
+        status = ofpbuf_put_uninit(reply, sizeof status);
+        // FIXME: setup and retrieve short_id. ofp_role_request establishes this (new feature).
+        status->short_id = htons(ofconn_get_controller_id(ofconn));
+        status->role = htonl(cinfo->role);
+        status->reason = OFPCSR_REQUEST; 
+        status->channel_status = cinfo->is_connected ? OFPCT_STATUS_UP : OFPCT_STATUS_DOWN;
+        memset(status->pad, 0, sizeof status->pad);
+
+        properties = ofpbuf_put_uninit(reply, padded_prop_len);
+        properties->type = htons(OFPCSPT_URI);
+        properties->length = prop_len;
+        // Must subtract off type and length of properties to not overrun the buffer
+        memset(properties->uri, 0, padded_prop_len - sizeof(struct ofp_controller_status_prop_uri));
+        strcpy(properties->uri, conn_uri);
+
+        status->length = sizeof(status) + properties->length;
+        // convert the lengths to network byte order after all lengths are calculated
+        status->length = htons(status->length);
+        properties->length = htons(properties->length);
+    }
+        
+    ofconn_send_replies(ofconn, &replies);
+    ofproto_free_ofproto_controller_info(&info);
 }
 
 void
@@ -1021,6 +1162,13 @@ void
 ofconn_set_controller_id(struct ofconn *ofconn, uint16_t controller_id)
 {
     ofconn->controller_id = controller_id;
+}
+
+/* Returns the controller id for 'ofconn'*/
+uint16_t
+ofconn_get_controller_id(struct ofconn *ofconn)
+{
+    return ofconn->controller_id;
 }
 
 /* Returns the default miss send length for 'ofconn'. */
@@ -1565,7 +1713,7 @@ ofconn_send(const struct ofconn *ofconn, struct ofpbuf *msg,
     ofpmsg_update_length(msg);
     rconn_send(ofconn->rconn, msg, counter);
 }
-
+
 /* Sending asynchronous messages. */
 
 static void schedule_packet_in(struct ofconn *, struct ofproto_packet_in,

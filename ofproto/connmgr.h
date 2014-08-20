@@ -127,6 +127,12 @@ bool ofconn_set_master_election_id(struct ofconn *, uint64_t);
 enum ofp12_controller_role ofconn_get_role(const struct ofconn *);
 void ofconn_set_role(struct ofconn *, enum ofp12_controller_role);
 
+void ofconn_setup_controller_status_async_send(struct ofconn *ofconn,
+                                               enum ofp_controller_status_reason reason);
+void ofconn_send_controller_status_async(struct ofconn *ofconn, const struct ofp_header *oh,
+                                   enum ofp_controller_status_reason reason);
+void ofconn_send_controller_status_reply(struct ofconn *ofconn, const struct ofp_header *oh);
+
 enum ofputil_protocol ofconn_get_protocol(const struct ofconn *);
 void ofconn_set_protocol(struct ofconn *, enum ofputil_protocol);
 
@@ -134,6 +140,8 @@ enum nx_packet_in_format ofconn_get_packet_in_format(struct ofconn *);
 void ofconn_set_packet_in_format(struct ofconn *, enum nx_packet_in_format);
 
 void ofconn_set_controller_id(struct ofconn *, uint16_t controller_id);
+
+uint16_t ofconn_get_controller_id(struct ofconn *);
 
 void ofconn_set_invalid_ttl_to_controller(struct ofconn *, bool);
 bool ofconn_get_invalid_ttl_to_controller(struct ofconn *);

@@ -389,6 +389,11 @@ enum ofpraw {
     /* NXST 1.0 (2): uint8_t[8][]. */
     OFPRAW_NXST_FLOW_MONITOR_REPLY,
 
+    /* OFPST 1.4+ (17): void. */
+    OFPRAW_OFPST_CONTROLLER_STATUS_REQUEST,
+    /* OFPST 1.4+ (17): struct ofp_controller_status[]. */
+    OFPRAW_OFPST_CONTROLLER_STATUS_REPLY,
+
 /* Nicira extension messages.
  *
  * Nicira extensions that correspond to standard OpenFlow messages are listed
@@ -417,6 +422,10 @@ enum ofpraw {
 
     /* NXT 1.0+ (23): void. */
     OFPRAW_NXT_FLOW_MONITOR_RESUMED,
+
+    /* OFPT 1.4+ (35): struct ofp_controller_status, uint8_t[8][]. */
+    OFPRAW_OFPT_CONTROLLER_STATUS_ASYNC,
+
 };
 
 /* Decoding messages into OFPRAW_* values. */
@@ -622,6 +631,13 @@ enum ofptype {
     OFPTYPE_FLOW_MONITOR_CANCEL,        /* OFPRAW_NXT_FLOW_MONITOR_CANCEL. */
     OFPTYPE_FLOW_MONITOR_PAUSED,        /* OFPRAW_NXT_FLOW_MONITOR_PAUSED. */
     OFPTYPE_FLOW_MONITOR_RESUMED,       /* OFPRAW_NXT_FLOW_MONITOR_RESUMED. */
+
+    /* Controller status multipart */
+    OFPTYPE_CONTROLLER_STATUS_REQUEST,  /* OFPRAW_OFPST_CONTROLLER_STATUS_REQUEST. */
+    OFPTYPE_CONTROLLER_STATUS_REPLY,    /* OFPRAW_OFPST_CONTROLLER_STATUS_REPLY. */
+
+    /* Controller status async. */
+    OFPTYPE_CONTROLLER_STATUS_ASYNC,    /* OFPRAW_OFPT_CONTROLLER_STATUS_ASYNC. */
 };
 
 /* Decoding messages into OFPTYPE_* values. */

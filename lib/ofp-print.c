@@ -1959,6 +1959,68 @@ ofp_print_echo(struct ds *string, const struct ofp_header *oh, int verbosity)
 }
 
 static void
+ofp_print_controller_status_generic(struct ds *string, enum ofp_controller_status_reason reason)
+{
+    ds_put_cstr(string, " reason=");
+
+    switch (reason) {
+    case OFPCSR_REQUEST:
+        ds_put_cstr(string, "'controller status request'");
+        break;
+    case OFPCSR_CHANNEL_STATUS:
+        ds_put_cstr(string, "'channel status changed'");
+        break;
+    case OFPCSR_ROLE:
+        ds_put_cstr(string, "'role changed'");
+        break;
+    case OFPCSR_CONTROLLER_ADDED:
+        ds_put_cstr(string, "'controller added'");
+        break;
+    case OFPCSR_CONTROLLER_REMOVED:
+        ds_put_cstr(string, "'controller removed'");
+        break;
+    case OFPCSR_SHORT_ID:
+        ds_put_cstr(string, "'controller id changed'");
+        break;
+    case OFPCSR_EXPERIMENTER:
+        ds_put_cstr(string, "'experimenter data changed'");
+        break;
+    default:
+        OVS_NOT_REACHED();
+    }
+}
+
+static void
+ofp_print_controller_status_async(struct ds *string, const struct ofp_header *oh)
+{
+    struct ofp_controller_status status;
+    enum ofperr error;
+
+    error = ofputil_decode_controller_status_async(oh, &status);
+    if (error) {
+        ofp_print_error(string, error);
+        return;
+    }
+
+    ofp_print_controller_status_generic(string, status.reason);
+}
+
+static void
+ofp_print_controller_status_message(struct ds *string, const struct ofp_header *oh)
+{
+    struct ofp_controller_status status;
+    enum ofperr error;
+
+    error = ofputil_decode_controller_status_message(oh, &status);
+    if (error) {
+        ofp_print_error(string, error);
+        return;
+    }
+
+    ofp_print_controller_status_generic(string, status.reason);
+}
+
+static void
 ofp_print_role_generic(struct ds *string, enum ofp12_controller_role role,
                        uint64_t generation_id)
 {
@@ -2896,6 +2958,15 @@ ofp_to_string__(const struct ofp_header *oh, enum ofpraw raw,
         break;
     case OFPTYPE_ROLE_STATUS:
         ofp_print_role_status_message(string, oh);
+        break;
+
+    case OFPTYPE_CONTROLLER_STATUS_REQUEST:
+    case OFPTYPE_CONTROLLER_STATUS_REPLY:
+        ofp_print_controller_status_message(string, oh);
+        break;
+
+    case OFPTYPE_CONTROLLER_STATUS_ASYNC:
+        ofp_print_controller_status_async(string, oh);
         break;
 
     case OFPTYPE_METER_STATS_REQUEST:

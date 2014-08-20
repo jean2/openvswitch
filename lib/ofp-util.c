@@ -5027,6 +5027,43 @@ ofputil_decode_role_status(const struct ofp_header *oh,
     return 0;
 }
 
+enum ofperr
+ofputil_decode_controller_status_async(const struct ofp_header *oh,
+                                 struct ofp_controller_status *status)
+{
+    struct ofpbuf b;
+    enum ofpraw raw;
+    const struct ofp_controller_status *ocs;
+
+    ofpbuf_use_const(&b, oh, ntohs(oh->length));
+    raw = ofpraw_pull_assert(&b);
+    ovs_assert(raw == OFPRAW_OFPT_CONTROLLER_STATUS_ASYNC);
+
+    ocs = ofpbuf_l3(&b);
+    status->reason = ocs->reason;
+
+    return 0;
+}
+
+enum ofperr
+ofputil_decode_controller_status_message(const struct ofp_header *oh,
+                                       struct ofp_controller_status *status)
+{
+    struct ofpbuf b;
+    enum ofpraw raw;
+    const struct ofp_controller_status *ocs;
+
+    ofpbuf_use_const(&b, oh, ntohs(oh->length));
+    raw = ofpraw_pull_assert(&b);
+    ovs_assert(raw == OFPRAW_OFPST_CONTROLLER_STATUS_REPLY ||
+               raw == OFPRAW_OFPST_CONTROLLER_STATUS_REQUEST);
+
+    ocs = ofpbuf_l3(&b);
+    status->reason = ntohs(ocs->reason);
+
+    return 0;
+}
+
 /* Table stats. */
 
 static void

@@ -1934,6 +1934,47 @@ done
 OVS_VSWITCHD_STOP
 AT_CLEANUP
 
+dnl This test checks that the controller status request/response messaging works
+AT_SETUP([ofproto - controller_status request/reply (OpenFlow 1.5)])
+OVS_VSWITCHD_START
+ON_EXIT([kill `cat c1.pid c2.pid`])
+
+# Start two ovs-ofctl controller processes.
+AT_CAPTURE_FILE([monitor1.log])
+AT_CAPTURE_FILE([expout1])
+AT_CAPTURE_FILE([experr1])
+AT_CAPTURE_FILE([monitor2.log])
+AT_CAPTURE_FILE([expout2])
+AT_CAPTURE_FILE([experr2])
+for i in 1 2; do
+     AT_CHECK([ovs-ofctl -O OpenFlow15 monitor br0 --detach --no-chdir --pidfile=`pwd`/c$i.pid --unixctl=`pwd`/c$i])
+    ovs-appctl -t `pwd`/c$i ofctl/barrier
+    ovs-appctl -t `pwd`/c$i ofctl/set-output-file monitor$i.log
+    : > expout$i
+    : > experr$i
+
+    # Send a controller status request 
+    ovs-appctl -t `pwd`/c$i ofctl/send 06120010000000020011000000000000
+    echo >>experr$i "send: OFPST_CONTROLLER_STATUS request (OF1.5): reason='controller status request'"
+    echo >>expout$i "OFPST_CONTROLLER_STATUS reply (OF1.5): reason='controller status request'"
+done
+
+for i in 1 2; do
+    ovs-appctl -t `pwd`/c$i ofctl/barrier
+    echo >>expout$i "OFPT_BARRIER_REPLY (OF1.5):"
+done
+
+# Check output.
+for i in 1 2; do
+    cp expout$i expout
+    AT_CHECK([grep -v '^send:' monitor$i.log | STRIP_XIDS], [0], [expout])
+    cp experr$i expout
+    AT_CHECK([grep '^send:' monitor$i.log | STRIP_XIDS], [0], [expout])
+done
+OVS_VSWITCHD_STOP
+AT_CLEANUP
+
+
 dnl This test checks that the role request/response messaging works,
 dnl that generation_id is handled properly, and that role status update
 dnl messages are sent when a controller's role gets changed from master
@@ -1999,6 +2040,83 @@ for i in 1 2; do
 done
 OVS_VSWITCHD_STOP
 AT_CLEANUP
+
+
+dnl This test checks that the role request/response messaging works,
+dnl that generation_id is handled properly, that role status update
+dnl messages are sent when a controller's role gets changed from master
+dnl to slave, and that controller status asychronous messages are sent
+dnl out appropriately.
+AT_SETUP([ofproto - controller role and controller_status async (OpenFlow 1.5)])
+OVS_VSWITCHD_START
+ON_EXIT([kill `cat c1.pid c2.pid`])
+
+# Start two ovs-ofctl controller processes.
+AT_CAPTURE_FILE([monitor1.log])
+AT_CAPTURE_FILE([expout1])
+AT_CAPTURE_FILE([experr1])
+AT_CAPTURE_FILE([monitor2.log])
+AT_CAPTURE_FILE([expout2])
+AT_CAPTURE_FILE([experr2])
+for i in 1 2; do
+     AT_CHECK([ovs-ofctl -O OpenFlow15 monitor br0 --detach --no-chdir --pidfile=`pwd`/c$i.pid --unixctl=`pwd`/c$i])
+    ovs-appctl -t `pwd`/c$i ofctl/barrier
+    ovs-appctl -t `pwd`/c$i ofctl/set-output-file monitor$i.log
+    : > expout$i
+    : > experr$i
+
+    # find out current role
+    ovs-appctl -t `pwd`/c$i ofctl/send 061800180000000200000000000000000000000000000000
+    echo >>experr$i "send: OFPT_ROLE_REQUEST (OF1.5): role=nochange"
+    echo >>expout$i "OFPT_ROLE_REPLY (OF1.5): role=equal"
+done
+
+# controller 1: Become slave (generation_id is initially undefined, so
+# 2^63+2 should not be stale)
+ovs-appctl -t `pwd`/c1 ofctl/send 061800180000000300000003000000008000000000000002
+echo >>experr1 "send: OFPT_ROLE_REQUEST (OF1.5): role=slave generation_id=9223372036854775810"
+echo >>expout1 "OFPT_CONTROLLER_STATUS_ASYNC (OF1.5): reason='role changed'" 
+echo >>expout1 "OFPT_ROLE_REPLY (OF1.5): role=slave generation_id=9223372036854775810"
+echo >>expout2 "OFPT_CONTROLLER_STATUS_ASYNC (OF1.5): reason='role changed'" 
+
+# controller 2: Become master.
+ovs-appctl -t `pwd`/c2 ofctl/send 061800180000000300000002000000008000000000000003
+echo >>experr2 "send: OFPT_ROLE_REQUEST (OF1.5): role=master generation_id=9223372036854775811"
+echo >>expout2 "OFPT_CONTROLLER_STATUS_ASYNC (OF1.5): reason='role changed'" 
+echo >>expout2 "OFPT_ROLE_REPLY (OF1.5): role=master generation_id=9223372036854775811"
+echo >>expout1 "OFPT_CONTROLLER_STATUS_ASYNC (OF1.5): reason='role changed'" 
+
+# controller 1: Try to become the master using a stale generation ID
+ovs-appctl -t `pwd`/c1 ofctl/send 061800180000000400000002000000000000000000000003
+echo >>experr1 "send: OFPT_ROLE_REQUEST (OF1.5): role=master generation_id=3"
+echo >>expout1 "OFPT_ERROR (OF1.5): OFPRRFC_STALE"
+echo >>expout1 "OFPT_ROLE_REQUEST (OF1.5): role=master generation_id=3"
+
+# controller 1: Become master using a valid generation ID
+ovs-appctl -t `pwd`/c1 ofctl/send 061800180000000500000002000000000000000000000001
+echo >>experr1 "send: OFPT_ROLE_REQUEST (OF1.5): role=master generation_id=1"
+echo >>expout1 "OFPT_CONTROLLER_STATUS_ASYNC (OF1.5): reason='role changed'" 
+echo >>expout1 "OFPT_CONTROLLER_STATUS_ASYNC (OF1.5): reason='role changed'" 
+echo >>expout1 "OFPT_ROLE_REPLY (OF1.5): role=master generation_id=1"
+echo >>expout2 "OFPT_ROLE_STATUS (OF1.5): role=slave generation_id=1 reason=master_request"
+echo >>expout2 "OFPT_CONTROLLER_STATUS_ASYNC (OF1.5): reason='role changed'" 
+echo >>expout2 "OFPT_CONTROLLER_STATUS_ASYNC (OF1.5): reason='role changed'" 
+
+for i in 1 2; do
+    ovs-appctl -t `pwd`/c$i ofctl/barrier
+    echo >>expout$i "OFPT_BARRIER_REPLY (OF1.5):"
+done
+
+# Check output.
+for i in 1 2; do
+    cp expout$i expout
+    AT_CHECK([grep -v '^send:' monitor$i.log | STRIP_XIDS], [0], [expout])
+    cp experr$i expout
+    AT_CHECK([grep '^send:' monitor$i.log | STRIP_XIDS], [0], [expout])
+done
+OVS_VSWITCHD_STOP
+AT_CLEANUP
+
 
 dnl This test checks that OFPT_PACKET_OUT accepts both OFPP_NONE (as
 dnl specified by OpenFlow 1.0) and OFPP_CONTROLLER (used by some

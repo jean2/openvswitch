@@ -801,6 +801,10 @@ struct ofpbuf *ofputil_encode_role_status(
 
 enum ofperr ofputil_decode_role_status(const struct ofp_header *oh,
                                        struct ofputil_role_status *rs);
+
+struct ofpbuf *ofputil_encode_controller_status(const struct ofp_header *oh,
+                                                const struct ofp_controller_status *status); 
+
 /* Abstract table stats.
  *
  * For now we use ofp12_table_stats as a superset of the other protocol
@@ -1165,6 +1169,12 @@ struct ofputil_bundle_add_msg {
     uint16_t            flags;
     const struct ofp_header   *msg;
 };
+
+enum ofperr ofputil_decode_controller_status_async(const struct ofp_header *oh,
+                                                   struct ofp_controller_status *status);
+
+enum ofperr ofputil_decode_controller_status_message(const struct ofp_header *oh,
+                                                     struct ofp_controller_status *status);
 
 enum ofperr ofputil_decode_bundle_ctrl(const struct ofp_header *,
                                        struct ofputil_bundle_ctrl_msg *);

@@ -59,6 +59,7 @@
 #include "unixctl.h"
 #include "vlog.h"
 #include "bundles.h"
+#include <stdlib.h>
 
 VLOG_DEFINE_THIS_MODULE(ofproto);
 
@@ -4562,7 +4563,7 @@ handle_role_request(struct ofconn *ofconn, const struct ofp_header *oh)
             && !ofconn_set_master_election_id(ofconn, request.generation_id)) {
                 return OFPERR_OFPRRFC_STALE;
         }
-
+        
         ofconn_set_role(ofconn, request.role);
     }
 
@@ -4571,6 +4572,14 @@ handle_role_request(struct ofconn *ofconn, const struct ofp_header *oh)
         ofconn, &reply.generation_id);
     buf = ofputil_encode_role_reply(oh, &reply);
     ofconn_send_reply(ofconn, buf);
+
+    return 0;
+} 
+
+static enum ofperr
+handle_controller_status(struct ofconn *ofconn, const struct ofp_header *oh)
+{
+    ofconn_send_controller_status_reply(ofconn, oh);
 
     return 0;
 }
@@ -5857,6 +5866,7 @@ handle_openflow__(struct ofconn *ofconn, const struct ofpbuf *msg)
     enum ofperr error;
 
     error = ofptype_decode(&type, oh);
+    
     if (error) {
         return error;
     }
@@ -5905,6 +5915,9 @@ handle_openflow__(struct ofconn *ofconn, const struct ofpbuf *msg)
 
     case OFPTYPE_ROLE_REQUEST:
         return handle_role_request(ofconn, oh);
+
+    case OFPTYPE_CONTROLLER_STATUS_REQUEST:
+        return handle_controller_status(ofconn, oh);
 
         /* OpenFlow replies. */
     case OFPTYPE_ECHO_REPLY:
@@ -6016,6 +6029,8 @@ handle_openflow__(struct ofconn *ofconn, const struct ofpbuf *msg)
     case OFPTYPE_TABLE_FEATURES_STATS_REQUEST:
     case OFPTYPE_TABLE_FEATURES_STATS_REPLY:
     case OFPTYPE_ROLE_STATUS:
+    case OFPTYPE_CONTROLLER_STATUS_REPLY:
+    case OFPTYPE_CONTROLLER_STATUS_ASYNC:
     default:
         if (ofpmsg_is_stat_request(oh)) {
             return OFPERR_OFPBRC_BAD_STAT;

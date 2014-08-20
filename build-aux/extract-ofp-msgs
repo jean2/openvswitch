@@ -118,7 +118,7 @@ def extract_ofp_msgs(output_file_name):
         m = re.match('\s+(?:OFPRAW_%s)(\d*)_([A-Z0-9_]+),?$' % type_,
                      line)
         if not m:
-            fatal("syntax error expecting OFPRAW_ enum")
+            fatal("syntax error expecting OFPRAW_%s enum" % type_)
         vinfix, name = m.groups()
         rawname = 'OFPRAW_%s%s_%s' % (type_, vinfix, name)
 

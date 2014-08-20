@@ -414,4 +414,64 @@ enum ofp14_flow_monitor_flags {
                                      */
 };
 
+/* Controller Status Message */
+
+enum ofp_controller_status_prop_type {
+    OFPCSPT_URI                    = 0,      /* Connection URI property. */
+    OFPCSPT_EXPERIMENTER           = 0xFFFF, /* Experimenter property. */
+};
+
+/* Common header for all Controller Status Properties */
+struct ofp_controller_status_prop_header {
+    ovs_be16         type;    /* One of OFPCSPT_*. */
+    ovs_be16         length;  /* Length in bytes of this property. */
+};
+OFP_ASSERT(sizeof(struct ofp_controller_status_prop_header) == 4);
+
+struct ofp_controller_status_prop_uri {
+    ovs_be16        type;    /* OFPCSPT_URI. */
+    ovs_be16        length;  /* Length in bytes of this property. */
+
+    /* Followed by:
+     *   - Exactly (length - 4) bytes containing Connection URI, then
+     *   - Exactly (length + 7)/8*8 - (length) (between 0 and 7)
+     *     bytes of all-zero bytes */
+    char             uri[0];
+};
+OFP_ASSERT(sizeof(struct ofp_controller_status_prop_uri) == 4);
+
+/* Why is the controller status being reported? */
+enum ofp_controller_status_reason {
+    OFPCSR_REQUEST            = 0, /* Controller requested status. */
+    OFPCSR_CHANNEL_STATUS     = 1, /* Oper status of channel changed. */
+    OFPCSR_ROLE               = 2, /* Controller role changed */
+    OFPCSR_CONTROLLER_ADDED   = 3, /* New controller added. */
+    OFPCSR_CONTROLLER_REMOVED = 4, /* Controller removed from config. */
+    OFPCSR_SHORT_ID           = 5, /* Controller ID changed. */
+    OFPCSR_EXPERIMENTER       = 6, /* Experimenter data changed. */
+};
+
+/* Body of OFPMP_CONTROLLER_STATUS reply message and body of async
+ * OFPT_CONTROLLER_STATUS message */
+struct ofp_controller_status {
+   ovs_be16 length;            /* Length of this entry. */
+   ovs_be16 short_id;          /* ID number which identifies the controller. */
+   ovs_be32 role;              /* Controller's role. One of OFPCR_ROLE_*. */
+   uint8_t reason;             /* One of OFPCSR_* reason codes. */
+   uint8_t channel_status;     /* Status of control channel.
+                                * One of OFPCT_STATUS_*. */
+   uint8_t pad[6];             /* Align to 64-bits. */
+
+    /* Controller Status Property list.  The Connection URI property is
+       required; other properties are optional. */
+    struct ofp_controller_status_prop_header properties[0];
+};
+OFP_ASSERT(sizeof(struct ofp_controller_status) == 16);
+
+/* Control channel status. */
+enum ofp_control_channel_status {
+    OFPCT_STATUS_UP     = 0,    /* Control channel is operational. */
+    OFPCT_STATUS_DOWN   = 1,    /* Control channel is not operational. */
+};
+
 #endif /* openflow/openflow-1.4.h */
