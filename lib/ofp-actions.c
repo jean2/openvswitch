@@ -6085,6 +6085,8 @@ ofpacts_parse__(char *str, struct ofpbuf *ofpacts,
                                      NXAST_RAW_SET_TUNNEL64);
         } else if (!strcasecmp(key, "load")) {
             error = parse_reg_load(value, ofpacts);
+        } else if (!strcasecmp(key, "copy_field")) {
+            error = parse_REG_MOVE(value, ofpacts, usable_protocols);
         } else if (!strcasecmp(key, "bundle_load")) {
             error = parse_bundle_load(value, ofpacts);
         } else if (!strcasecmp(key, "drop")) {

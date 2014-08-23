@@ -472,11 +472,11 @@ OVS_VSWITCHD_STOP
 AT_CLEANUP
 
 dnl Tests that 1.5 copy-field can copy into the standardized xregs.
-AT_SETUP([ofproto-dpif - copy-field into extended registers])
+AT_SETUP([ofproto-dpif - copy_field into extended registers])
 OVS_VSWITCHD_START
 ADD_OF_PORTS([br0], [1], [2], [3])
 AT_DATA([flows.txt], [dnl
-table=0     actions=move:OXM_OF_ETH_SRC[[0..47]]->OXM_OF_PKT_REG0[[0..47]],goto_table(1)
+table=0     actions=copy_field:OXM_OF_ETH_SRC[[0..47]]->OXM_OF_PKT_REG0[[0..47]],goto_table(1)
 table=1,xreg0=0x0000505400000005   actions=2
 
 # These low-priority rules shouldn't match.  They're here only to make really
