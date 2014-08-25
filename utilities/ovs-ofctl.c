@@ -694,6 +694,12 @@ ofctl_dump_table_features(int argc OVS_UNUSED, char *argv[])
     vconn_close(vconn);
 }
 
+static void
+ofctl_dump_controller_status(int argc OVS_UNUSED, char *argv[])
+{
+    dump_trivial_stats_transaction(argv[1], OFPRAW_OFPST_CONTROLLER_STATUS_REQUEST);
+}
+
 static bool fetch_port_by_stats(struct vconn *,
                                 const char *port_name, ofp_port_t port_no,
                                 struct ofputil_phy_port *);
@@ -3522,6 +3528,7 @@ static const struct command all_commands[] = {
     { "dump-desc", 1, 1, ofctl_dump_desc },
     { "dump-tables", 1, 1, ofctl_dump_tables },
     { "dump-table-features", 1, 1, ofctl_dump_table_features },
+    { "dump-controller-status", 1, 1, ofctl_dump_controller_status },
     { "dump-flows", 1, 2, ofctl_dump_flows },
     { "dump-aggregate", 1, 2, ofctl_dump_aggregate },
     { "queue-stats", 1, 3, ofctl_queue_stats },
