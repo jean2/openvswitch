@@ -2484,7 +2484,7 @@ compose_output_action__(struct xlate_ctx *ctx, ofp_port_t ofp_port,
 
     /* If 'struct flow' gets additional metadata, we'll need to zero it out
      * before traversing a patch port. */
-    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 27);
+    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 28);
 
     if (!xport) {
         xlate_report(ctx, "Nonexistent output port");
@@ -2533,6 +2533,7 @@ compose_output_action__(struct xlate_ctx *ctx, ofp_port_t ofp_port,
         flow->metadata = htonll(0);
         memset(&flow->tunnel, 0, sizeof flow->tunnel);
         memset(flow->regs, 0, sizeof flow->regs);
+        flow->actset_output = OFPP15_UNSET;
 
         special = process_special(ctx, &ctx->xin->flow, peer,
                                   ctx->xin->packet);
@@ -3535,8 +3536,16 @@ may_receive(const struct xport *xport, struct xlate_ctx *ctx)
 static void
 xlate_write_actions(struct xlate_ctx *ctx, const struct ofpact *a)
 {
-    struct ofpact_nest *on = ofpact_get_WRITE_ACTIONS(a);
-    ofpbuf_put(&ctx->action_set, on->actions, ofpact_nest_get_action_len(on));
+    const struct ofpact_nest *on = ofpact_get_WRITE_ACTIONS(a);
+    size_t on_len = ofpact_nest_get_action_len(on);
+    const struct ofpact *inner;
+
+    OFPACT_FOR_EACH (inner, on->actions, on_len) {
+        if (inner->type == OFPACT_OUTPUT) {
+            ctx->xin->flow.actset_output = ofpact_get_OUTPUT(inner)->port;
+        }
+    }
+    ofpbuf_put(&ctx->action_set, on->actions, on_len);
     ofpact_pad(&ctx->action_set);
 }
 
@@ -3938,6 +3947,7 @@ xlate_in_init(struct xlate_in *xin, struct ofproto_dpif *ofproto,
     xin->ofproto = ofproto;
     xin->flow = *flow;
     xin->flow.in_port.ofp_port = in_port;
+    xin->flow.actset_output = OFPP15_UNSET;
     xin->packet = packet;
     xin->may_learn = packet != NULL;
     xin->rule = rule;
