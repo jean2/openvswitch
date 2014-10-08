@@ -381,6 +381,7 @@ parse_ofp_str__(struct ofputil_flow_mod *fm, int command, char *string,
                         return error;
                     }
                     error = str_to_be64(mask + 1, &fm->cookie_mask);
+                    fm->cookie &= fm->cookie_mask;
 
                     /* Matching of the cookie is only supported through NXM or
                      * OF1.1+. */
