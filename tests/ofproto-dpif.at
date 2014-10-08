@@ -491,7 +491,29 @@ AT_CHECK([tail -1 stdout], [0], [Datapath actions: 2
 OVS_VSWITCHD_STOP
 AT_CLEANUP
 
-dnl Tests that 1.5 set-field with mask in the metadata register.
+dnl Tests that 1.5 copy-field can copy from actset_output
+AT_SETUP([ofproto-dpif - copy_field with actset_output])
+OVS_VSWITCHD_START
+ADD_OF_PORTS([br0], [1], [2], [3])
+AT_DATA([flows.txt], [dnl
+table=0     actions=write_actions(output(2)),goto_table(1)
+table=1     actions=copy_field:ONFOXM_ET_ACTSET_OUTPUT[[0..31]]->OXM_OF_PKT_REG0[[0..31]],goto_table(2)
+table=2,xreg0=0x0000000000000002  actions=
+
+# These low-priority rules shouldn't match.  They're here only to make really
+# sure that the test fails if either of the above rules fails to match.
+table=0,priority=0                        actions=3
+table=1,priority=0                        actions=3
+table=2,priority=0                        actions=3
+])
+AT_CHECK([ovs-ofctl -O OpenFlow13 add-flows br0 flows.txt])
+AT_CHECK([ovs-appctl ofproto/trace ovs-dummy 'in_port(1),eth(src=50:54:00:00:00:05,dst=50:54:00:00:00:07),eth_type(0x0800),ipv4(src=192.168.0.1,dst=192.168.0.2,proto=1,tos=0,ttl=128,frag=no),icmp(type=8,code=0)'], [0], [stdout])
+AT_CHECK([tail -1 stdout], [0], [Datapath actions: 2
+])
+OVS_VSWITCHD_STOP
+AT_CLEANUP
+
+Adnl Tests that 1.5 set-field with mask in the metadata register.
 AT_SETUP([ofproto-dpif - masked set-field into metadata])
 OVS_VSWITCHD_START
 ADD_OF_PORTS([br0], [1], [2], [3])
