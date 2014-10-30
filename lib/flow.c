@@ -681,6 +681,22 @@ flow_get_metadata(const struct flow *flow, struct flow_metadata *fmd)
     fmd->in_port = flow->in_port.ofp_port;
 }
 
+void
+flow_set_metadata(const struct flow_metadata *fmd, struct flow *flow)
+{
+    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 27);
+
+    flow->dp_hash = fmd->dp_hash;
+    flow->recirc_id = fmd->recirc_id;
+    flow->tunnel.tun_id = fmd->tun_id;
+    flow->tunnel.ip_src = fmd->tun_src;
+    flow->tunnel.ip_dst = fmd->tun_dst;
+    flow->metadata = fmd->metadata;
+    memcpy(flow->regs, fmd->regs, sizeof flow->regs);
+    flow->pkt_mark = fmd->pkt_mark;
+    flow->in_port.ofp_port = fmd->in_port;
+}
+
 char *
 flow_to_string(const struct flow *flow)
 {

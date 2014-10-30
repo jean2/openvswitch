@@ -3170,7 +3170,7 @@ handle_packet_out(struct ofconn *ofconn, const struct ofp_header *oh)
 
     /* Verify actions against packet, then send packet if successful. */
     flow_extract(payload, NULL, &flow);
-    flow.in_port.ofp_port = po.fmd.in_port;
+    flow_set_metadata(&(po.fmd), &flow);
     error = ofproto_check_ofpacts(p, po.ofpacts, po.ofpacts_len);
     if (!error) {
         error = p->ofproto_class->packet_out(p, payload, &flow,
