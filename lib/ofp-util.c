@@ -3634,12 +3634,12 @@ ofputil_decode_packet_out(struct ofputil_packet_out *po,
 
     ofpbuf_use_const(&b, oh, ntohs(oh->length));
     raw = ofpraw_pull_assert(&b);
+    memset(&(po->fmd), 0, sizeof(struct flow_metadata));
 
     if (raw == OFPRAW_OFPT15_PACKET_OUT) {
         enum ofperr error;
         const struct ofp15_packet_out *opo = ofpbuf_pull(&b, sizeof *opo);
         struct match match;
-        struct flow_metadata fmd;
 
         po->buffer_id = ntohl(opo->buffer_id);
 
@@ -3652,14 +3652,13 @@ ofputil_decode_packet_out(struct ofputil_packet_out *po,
         if (error) {
             return error;
         }
-        ofputil_match_to_fmd(&match, &fmd);
-        po->in_port = fmd.in_port;
+        ofputil_match_to_fmd(&match, &(po->fmd));
     } else if (raw == OFPRAW_OFPT11_PACKET_OUT) {
         enum ofperr error;
         const struct ofp11_packet_out *opo = ofpbuf_pull(&b, sizeof *opo);
 
         po->buffer_id = ntohl(opo->buffer_id);
-        error = ofputil_port_from_ofp11(opo->in_port, &po->in_port);
+        error = ofputil_port_from_ofp11(opo->in_port, &po->fmd.in_port);
         if (error) {
             return error;
         }
@@ -3674,7 +3673,7 @@ ofputil_decode_packet_out(struct ofputil_packet_out *po,
         const struct ofp10_packet_out *opo = ofpbuf_pull(&b, sizeof *opo);
 
         po->buffer_id = ntohl(opo->buffer_id);
-        po->in_port = u16_to_ofp(ntohs(opo->in_port));
+        po->fmd.in_port = u16_to_ofp(ntohs(opo->in_port));
 
         error = ofpacts_pull_openflow_actions(&b, ntohs(opo->actions_len),
                                               oh->version, ofpacts);
@@ -3685,11 +3684,11 @@ ofputil_decode_packet_out(struct ofputil_packet_out *po,
         OVS_NOT_REACHED();
     }
 
-    if (ofp_to_u16(po->in_port) >= ofp_to_u16(OFPP_MAX)
-        && po->in_port != OFPP_LOCAL
-        && po->in_port != OFPP_NONE && po->in_port != OFPP_CONTROLLER) {
+    if (ofp_to_u16(po->fmd.in_port) >= ofp_to_u16(OFPP_MAX)
+        && po->fmd.in_port != OFPP_LOCAL
+        && po->fmd.in_port != OFPP_NONE && po->fmd.in_port != OFPP_CONTROLLER) {
         VLOG_WARN_RL(&bad_ofmsg_rl, "packet-out has bad input port %#"PRIx16,
-                     po->in_port);
+                     po->fmd.in_port);
         return OFPERR_OFPBRC_BAD_PORT;
     }
 
@@ -5883,7 +5882,7 @@ ofputil_encode_packet_out(const struct ofputil_packet_out *po,
 
         opo = ofpbuf_l3(msg);
         opo->buffer_id = htonl(po->buffer_id);
-        opo->in_port = htons(ofp_to_u16(po->in_port));
+        opo->in_port = htons(ofp_to_u16(po->fmd.in_port));
         opo->actions_len = htons(ofpbuf_size(msg) - actions_ofs);
         break;
     }
@@ -5901,20 +5900,17 @@ ofputil_encode_packet_out(const struct ofputil_packet_out *po,
                                            ofp_version);
         opo = ofpbuf_l3(msg);
         opo->buffer_id = htonl(po->buffer_id);
-        opo->in_port = ofputil_port_to_ofp11(po->in_port);
+        opo->in_port = ofputil_port_to_ofp11(po->fmd.in_port);
         opo->actions_len = htons(len);
         break;
     }
 
     case OFP15_VERSION: {
         struct ofp15_packet_out *opo;
-        struct flow_metadata fmd;
         struct match match;
         size_t len;
 
-        memset((char *) &fmd, '\0', sizeof(fmd));
-        fmd.in_port = po->in_port;
-        ofputil_fmd_to_match(&fmd, &match);
+        ofputil_fmd_to_match(&(po->fmd), &match);
         size += sizeof(struct flow_metadata) * 2;
 
         msg = ofpraw_alloc(OFPRAW_OFPT15_PACKET_OUT, ofp_version, size);
