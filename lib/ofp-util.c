@@ -3263,19 +3263,26 @@ ofputil_encode_flow_removed(const struct ofputil_flow_removed *fr,
 }
 
 static void
+ofputil_match_to_fmd(const struct match *match,
+                     struct flow_metadata *fmd)
+{
+    fmd->in_port = match->flow.in_port.ofp_port;
+    fmd->tun_id = match->flow.tunnel.tun_id;
+    fmd->tun_src = match->flow.tunnel.ip_src;
+    fmd->tun_dst = match->flow.tunnel.ip_dst;
+    fmd->metadata = match->flow.metadata;
+    memcpy(fmd->regs, match->flow.regs, sizeof fmd->regs);
+    fmd->pkt_mark = match->flow.pkt_mark;
+}
+
+static void
 ofputil_decode_packet_in_finish(struct ofputil_packet_in *pin,
                                 struct match *match, struct ofpbuf *b)
 {
     pin->packet = ofpbuf_data(b);
     pin->packet_len = ofpbuf_size(b);
 
-    pin->fmd.in_port = match->flow.in_port.ofp_port;
-    pin->fmd.tun_id = match->flow.tunnel.tun_id;
-    pin->fmd.tun_src = match->flow.tunnel.ip_src;
-    pin->fmd.tun_dst = match->flow.tunnel.ip_dst;
-    pin->fmd.metadata = match->flow.metadata;
-    memcpy(pin->fmd.regs, match->flow.regs, sizeof pin->fmd.regs);
-    pin->fmd.pkt_mark = match->flow.pkt_mark;
+    ofputil_match_to_fmd(match, &(pin->fmd));
 }
 
 enum ofperr
@@ -3383,36 +3390,36 @@ ofputil_decode_packet_in(struct ofputil_packet_in *pin,
 }
 
 static void
-ofputil_packet_in_to_match(const struct ofputil_packet_in *pin,
-                           struct match *match)
+ofputil_fmd_to_match(const struct flow_metadata *fmd,
+                     struct match *match)
 {
     int i;
 
     match_init_catchall(match);
-    if (pin->fmd.tun_id != htonll(0)) {
-        match_set_tun_id(match, pin->fmd.tun_id);
+    if (fmd->tun_id != htonll(0)) {
+        match_set_tun_id(match, fmd->tun_id);
     }
-    if (pin->fmd.tun_src != htonl(0)) {
-        match_set_tun_src(match, pin->fmd.tun_src);
+    if (fmd->tun_src != htonl(0)) {
+        match_set_tun_src(match, fmd->tun_src);
     }
-    if (pin->fmd.tun_dst != htonl(0)) {
-        match_set_tun_dst(match, pin->fmd.tun_dst);
+    if (fmd->tun_dst != htonl(0)) {
+        match_set_tun_dst(match, fmd->tun_dst);
     }
-    if (pin->fmd.metadata != htonll(0)) {
-        match_set_metadata(match, pin->fmd.metadata);
+    if (fmd->metadata != htonll(0)) {
+        match_set_metadata(match, fmd->metadata);
     }
 
     for (i = 0; i < FLOW_N_REGS; i++) {
-        if (pin->fmd.regs[i]) {
-            match_set_reg(match, i, pin->fmd.regs[i]);
+        if (fmd->regs[i]) {
+            match_set_reg(match, i, fmd->regs[i]);
         }
     }
 
-    if (pin->fmd.pkt_mark != 0) {
-        match_set_pkt_mark(match, pin->fmd.pkt_mark);
+    if (fmd->pkt_mark != 0) {
+        match_set_pkt_mark(match, fmd->pkt_mark);
     }
 
-    match_set_in_port(match, pin->fmd.in_port);
+    match_set_in_port(match, fmd->in_port);
 }
 
 static struct ofpbuf *
@@ -3442,7 +3449,7 @@ ofputil_encode_nx_packet_in(const struct ofputil_packet_in *pin)
     struct match match;
     size_t match_len;
 
-    ofputil_packet_in_to_match(pin, &match);
+    ofputil_fmd_to_match(&(pin->fmd), &match);
 
     /* The final argument is just an estimate of the space required. */
     packet = ofpraw_alloc_xid(OFPRAW_NXT_PACKET_IN, OFP10_VERSION,
@@ -3506,7 +3513,7 @@ ofputil_encode_ofp12_packet_in(const struct ofputil_packet_in *pin,
         packet_in_size = sizeof (struct ofp13_packet_in);
     }
 
-    ofputil_packet_in_to_match(pin, &match);
+    ofputil_fmd_to_match(&(pin->fmd), &match);
 
     /* The final argument is just an estimate of the space required. */
     packet = ofpraw_alloc_xid(packet_in_raw, packet_in_version,
@@ -3628,7 +3635,26 @@ ofputil_decode_packet_out(struct ofputil_packet_out *po,
     ofpbuf_use_const(&b, oh, ntohs(oh->length));
     raw = ofpraw_pull_assert(&b);
 
-    if (raw == OFPRAW_OFPT11_PACKET_OUT) {
+    if (raw == OFPRAW_OFPT15_PACKET_OUT) {
+        enum ofperr error;
+        const struct ofp15_packet_out *opo = ofpbuf_pull(&b, sizeof *opo);
+        struct match match;
+        struct flow_metadata fmd;
+
+        po->buffer_id = ntohl(opo->buffer_id);
+
+        error = oxm_pull_match_loose(&b, &match);
+        if (error) {
+            return error;
+        }
+        error = ofpacts_pull_openflow_actions(&b, ntohs(opo->actions_len),
+                                              oh->version, ofpacts);
+        if (error) {
+            return error;
+        }
+        ofputil_match_to_fmd(&match, &fmd);
+        po->in_port = fmd.in_port;
+    } else if (raw == OFPRAW_OFPT11_PACKET_OUT) {
         enum ofperr error;
         const struct ofp11_packet_out *opo = ofpbuf_pull(&b, sizeof *opo);
 
@@ -5865,8 +5891,7 @@ ofputil_encode_packet_out(const struct ofputil_packet_out *po,
     case OFP11_VERSION:
     case OFP12_VERSION:
     case OFP13_VERSION:
-    case OFP14_VERSION:
-    case OFP15_VERSION: {
+    case OFP14_VERSION: {
         struct ofp11_packet_out *opo;
         size_t len;
 
@@ -5877,6 +5902,28 @@ ofputil_encode_packet_out(const struct ofputil_packet_out *po,
         opo = ofpbuf_l3(msg);
         opo->buffer_id = htonl(po->buffer_id);
         opo->in_port = ofputil_port_to_ofp11(po->in_port);
+        opo->actions_len = htons(len);
+        break;
+    }
+
+    case OFP15_VERSION: {
+        struct ofp15_packet_out *opo;
+        struct flow_metadata fmd;
+        struct match match;
+        size_t len;
+
+        memset((char *) &fmd, '\0', sizeof(fmd));
+        fmd.in_port = po->in_port;
+        ofputil_fmd_to_match(&fmd, &match);
+        size += sizeof(struct flow_metadata) * 2;
+
+        msg = ofpraw_alloc(OFPRAW_OFPT15_PACKET_OUT, ofp_version, size);
+        ofpbuf_put_zeros(msg, sizeof *opo);
+        oxm_put_match(msg, &match, ofputil_protocol_to_ofp_version(protocol));
+        len = ofpacts_put_openflow_actions(po->ofpacts, po->ofpacts_len, msg,
+                                           ofp_version);
+        opo = ofpbuf_l3(msg);
+        opo->buffer_id = htonl(po->buffer_id);
         opo->actions_len = htons(len);
         break;
     }
