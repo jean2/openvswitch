@@ -3151,8 +3151,8 @@ handle_packet_out(struct ofconn *ofconn, const struct ofp_header *oh)
     if (error) {
         goto exit_free_ofpacts;
     }
-    if (ofp_to_u16(po.in_port) >= p->max_ports
-        && ofp_to_u16(po.in_port) < ofp_to_u16(OFPP_MAX)) {
+    if (ofp_to_u16(po.fmd.in_port) >= p->max_ports
+        && ofp_to_u16(po.fmd.in_port) < ofp_to_u16(OFPP_MAX)) {
         error = OFPERR_OFPBRC_BAD_PORT;
         goto exit_free_ofpacts;
     }
@@ -3170,7 +3170,7 @@ handle_packet_out(struct ofconn *ofconn, const struct ofp_header *oh)
 
     /* Verify actions against packet, then send packet if successful. */
     flow_extract(payload, NULL, &flow);
-    flow.in_port.ofp_port = po.in_port;
+    flow.in_port.ofp_port = po.fmd.in_port;
     error = ofproto_check_ofpacts(p, po.ofpacts, po.ofpacts_len);
     if (!error) {
         error = p->ofproto_class->packet_out(p, payload, &flow,

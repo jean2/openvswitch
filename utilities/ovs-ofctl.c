@@ -1686,8 +1686,9 @@ ofctl_packet_out(int argc, char *argv[])
         ovs_fatal(0, "%s", error);
     }
 
+    memset(&(po.fmd), 0, sizeof(struct flow_metadata));
     po.buffer_id = UINT32_MAX;
-    po.in_port = str_to_port_no(argv[1], argv[2]);
+    po.fmd.in_port = str_to_port_no(argv[1], argv[2]);
     po.ofpacts = ofpbuf_data(&ofpacts);
     po.ofpacts_len = ofpbuf_size(&ofpacts);
 
