@@ -1713,6 +1713,58 @@ ofctl_packet_out(int argc, char *argv[])
 }
 
 static void
+ofctl_packet_out_metadata(int argc, char *argv[])
+{
+    enum ofputil_protocol protocol;
+    struct ofputil_packet_out po;
+    struct ofpbuf ofpacts;
+    struct vconn *vconn;
+    char *error;
+    int i;
+    enum ofputil_protocol usable_protocols; /* XXX: Use in proto selection */
+
+    ofpbuf_init(&ofpacts, 64);
+    error = ofpacts_parse_actions(argv[5], &ofpacts, &usable_protocols);
+    if (error) {
+        ovs_fatal(0, "%s", error);
+    }
+
+    memset(&(po.fmd), 0, sizeof(struct flow_metadata));
+    po.buffer_id = UINT32_MAX;
+    po.fmd.in_port = str_to_port_no(argv[1], argv[2]);
+    error = str_to_be64(argv[3], &po.fmd.metadata);
+    if (error) {
+        ovs_fatal(0, "%s", error);
+    }
+    error = str_to_be64(argv[4], &po.fmd.tun_id);
+    if (error) {
+        ovs_fatal(0, "%s", error);
+    }
+
+    po.ofpacts = ofpbuf_data(&ofpacts);
+    po.ofpacts_len = ofpbuf_size(&ofpacts);
+
+    protocol = open_vconn(argv[1], &vconn);
+    for (i = 6; i < argc; i++) {
+        struct ofpbuf *packet, *opo;
+        const char *error_msg;
+
+        error_msg = eth_from_hex(argv[i], &packet);
+        if (error_msg) {
+            ovs_fatal(0, "%s", error_msg);
+        }
+
+        po.packet = ofpbuf_data(packet);
+        po.packet_len = ofpbuf_size(packet);
+        opo = ofputil_encode_packet_out(&po, protocol);
+        transact_noreply(vconn, opo);
+        ofpbuf_delete(packet);
+    }
+    vconn_close(vconn);
+    ofpbuf_uninit(&ofpacts);
+}
+
+static void
 ofctl_mod_port(int argc OVS_UNUSED, char *argv[])
 {
     struct ofp_config_flag {
@@ -3565,6 +3617,8 @@ static const struct command all_commands[] = {
     { "encode-error-reply", NULL, 2, 2, ofctl_encode_error_reply },
     { "ofp-print", NULL, 1, 2, ofctl_ofp_print },
     { "encode-hello", NULL, 1, 1, ofctl_encode_hello },
+    { "packet-out-metadata", "switch in_port metadata tun_id actions packet...",
+      6, INT_MAX, ofctl_packet_out_metadata },
 
     { NULL, NULL, 0, 0, NULL },
 };

@@ -210,6 +210,7 @@ void flow_extract(struct ofpbuf *, const struct pkt_metadata *md,
 void flow_zero_wildcards(struct flow *, const struct flow_wildcards *);
 void flow_unwildcard_tp_ports(const struct flow *, struct flow_wildcards *);
 void flow_get_metadata(const struct flow *, struct flow_metadata *);
+void flow_set_metadata(const struct flow_metadata *, struct flow *);
 
 char *flow_to_string(const struct flow *);
 void format_flags(struct ds *ds, const char *(*bit_to_string)(uint32_t),
