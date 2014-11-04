@@ -1765,6 +1765,56 @@ ofctl_packet_out_metadata(int argc, char *argv[])
 }
 
 static void
+ofctl_packet_out_packet_type(int argc, char *argv[])
+{
+    enum ofputil_protocol protocol;
+    struct ofputil_packet_out po;
+    struct ofpbuf ofpacts;
+    struct vconn *vconn;
+    char *error;
+    int i;
+    enum ofputil_protocol usable_protocols; /* XXX: Use in proto selection */
+    uint32_t packet_type;
+
+    ofpbuf_init(&ofpacts, 64);
+    error = ofpacts_parse_actions(argv[4], &ofpacts, &usable_protocols);
+    if (error) {
+        ovs_fatal(0, "%s", error);
+    }
+
+    memset(&(po.fmd), 0, sizeof(struct flow_metadata));
+    po.buffer_id = UINT32_MAX;
+    po.fmd.in_port = str_to_port_no(argv[1], argv[2]);
+    error = str_to_u32(argv[3], &packet_type);
+    if (error) {
+        ovs_fatal(0, "%s", error);
+    }
+    po.fmd.packet_type = htonl(packet_type);
+
+    po.ofpacts = ofpbuf_data(&ofpacts);
+    po.ofpacts_len = ofpbuf_size(&ofpacts);
+
+    protocol = open_vconn(argv[1], &vconn);
+    for (i = 5; i < argc; i++) {
+        struct ofpbuf *packet, *opo;
+        const char *error_msg;
+
+        error_msg = eth_from_hex(argv[i], &packet);
+        if (error_msg) {
+            ovs_fatal(0, "%s", error_msg);
+        }
+
+        po.packet = ofpbuf_data(packet);
+        po.packet_len = ofpbuf_size(packet);
+        opo = ofputil_encode_packet_out(&po, protocol);
+        transact_noreply(vconn, opo);
+        ofpbuf_delete(packet);
+    }
+    vconn_close(vconn);
+    ofpbuf_uninit(&ofpacts);
+}
+
+static void
 ofctl_mod_port(int argc OVS_UNUSED, char *argv[])
 {
     struct ofp_config_flag {
@@ -3619,6 +3669,8 @@ static const struct command all_commands[] = {
     { "encode-hello", NULL, 1, 1, ofctl_encode_hello },
     { "packet-out-metadata", "switch in_port metadata tun_id actions packet...",
       6, INT_MAX, ofctl_packet_out_metadata },
+    { "packet-out-packet-type", "switch in_port packet-type actions packet...",
+      5, INT_MAX, ofctl_packet_out_packet_type },
 
     { NULL, NULL, 0, 0, NULL },
 };
