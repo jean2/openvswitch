@@ -185,7 +185,7 @@ ofputil_netmask_to_wcbits(ovs_be32 netmask)
 void
 ofputil_wildcard_from_ofpfw10(uint32_t ofpfw, struct flow_wildcards *wc)
 {
-    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 27);
+    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 28);
 
     /* Initialize most of wc. */
     flow_wildcards_init_catchall(wc);
@@ -3271,6 +3271,7 @@ ofputil_match_to_fmd(const struct match *match,
     fmd->tun_src = match->flow.tunnel.ip_src;
     fmd->tun_dst = match->flow.tunnel.ip_dst;
     fmd->metadata = match->flow.metadata;
+    fmd->packet_type = match->flow.packet_type;
     memcpy(fmd->regs, match->flow.regs, sizeof fmd->regs);
     fmd->pkt_mark = match->flow.pkt_mark;
 }
@@ -3408,6 +3409,7 @@ ofputil_fmd_to_match(const struct flow_metadata *fmd,
     if (fmd->metadata != htonll(0)) {
         match_set_metadata(match, fmd->metadata);
     }
+    match_set_packet_type(match, fmd->packet_type);
 
     for (i = 0; i < FLOW_N_REGS; i++) {
         if (fmd->regs[i]) {

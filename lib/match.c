@@ -211,6 +211,13 @@ match_set_tun_flags_masked(struct match *match, uint16_t flags, uint16_t mask)
 }
 
 void
+match_set_packet_type(struct match *match, ovs_be32 packet_type)
+{
+    match->wc.masks.packet_type = OVS_BE32_MAX;
+    match->flow.packet_type = packet_type;
+}
+
+void
 match_set_in_port(struct match *match, ofp_port_t ofp_port)
 {
     match->wc.masks.in_port.ofp_port = u16_to_ofp(UINT16_MAX);
@@ -863,7 +870,7 @@ match_format(const struct match *match, struct ds *s, unsigned int priority)
 
     int i;
 
-    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 27);
+    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 28);
 
     if (priority != OFP_DEFAULT_PRIORITY) {
         ds_put_format(s, "priority=%u,", priority);
@@ -884,6 +891,8 @@ match_format(const struct match *match, struct ds *s, unsigned int priority)
     if (wc->masks.skb_priority) {
         ds_put_format(s, "skb_priority=%#"PRIx32",", f->skb_priority);
     }
+
+    format_be32_masked(s, "packet_type", f->packet_type, wc->masks.packet_type);
 
     if (wc->masks.dl_type) {
         skip_type = true;

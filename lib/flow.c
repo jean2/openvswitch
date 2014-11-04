@@ -121,7 +121,7 @@ struct mf_ctx {
  * away.  Some GCC versions gave warnings on ALWAYS_INLINE, so these are
  * defined as macros. */
 
-#if (FLOW_WC_SEQ != 27)
+#if (FLOW_WC_SEQ != 28)
 #define MINIFLOW_ASSERT(X) ovs_assert(X)
 BUILD_MESSAGE("FLOW_WC_SEQ changed: miniflow_extract() will have runtime "
                "assertions enabled. Consider updating FLOW_WC_SEQ after "
@@ -668,7 +668,7 @@ flow_unwildcard_tp_ports(const struct flow *flow, struct flow_wildcards *wc)
 void
 flow_get_metadata(const struct flow *flow, struct flow_metadata *fmd)
 {
-    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 27);
+    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 28);
 
     fmd->dp_hash = flow->dp_hash;
     fmd->recirc_id = flow->recirc_id;
@@ -676,6 +676,7 @@ flow_get_metadata(const struct flow *flow, struct flow_metadata *fmd)
     fmd->tun_src = flow->tunnel.ip_src;
     fmd->tun_dst = flow->tunnel.ip_dst;
     fmd->metadata = flow->metadata;
+    fmd->packet_type = flow->packet_type;
     memcpy(fmd->regs, flow->regs, sizeof fmd->regs);
     fmd->pkt_mark = flow->pkt_mark;
     fmd->in_port = flow->in_port.ofp_port;
@@ -684,7 +685,7 @@ flow_get_metadata(const struct flow *flow, struct flow_metadata *fmd)
 void
 flow_set_metadata(const struct flow_metadata *fmd, struct flow *flow)
 {
-    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 27);
+    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 28);
 
     flow->dp_hash = fmd->dp_hash;
     flow->recirc_id = fmd->recirc_id;
@@ -692,6 +693,7 @@ flow_set_metadata(const struct flow_metadata *fmd, struct flow *flow)
     flow->tunnel.ip_src = fmd->tun_src;
     flow->tunnel.ip_dst = fmd->tun_dst;
     flow->metadata = fmd->metadata;
+    flow->packet_type = fmd->packet_type;
     memcpy(flow->regs, fmd->regs, sizeof flow->regs);
     flow->pkt_mark = fmd->pkt_mark;
     flow->in_port.ofp_port = fmd->in_port;
@@ -831,7 +833,7 @@ void flow_wildcards_init_for_packet(struct flow_wildcards *wc,
     memset(&wc->masks, 0x0, sizeof wc->masks);
 
     /* Update this function whenever struct flow changes. */
-    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 27);
+    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 28);
 
     if (flow->tunnel.ip_dst) {
         if (flow->tunnel.flags & FLOW_TNL_F_KEY) {
@@ -854,6 +856,7 @@ void flow_wildcards_init_for_packet(struct flow_wildcards *wc,
     WC_MASK_FIELD(wc, pkt_mark);
     WC_MASK_FIELD(wc, recirc_id);
     WC_MASK_FIELD(wc, dp_hash);
+    WC_MASK_FIELD(wc, packet_type);
     WC_MASK_FIELD(wc, in_port);
 
     WC_MASK_FIELD(wc, dl_dst);
@@ -926,14 +929,14 @@ uint64_t
 flow_wc_map(const struct flow *flow)
 {
     /* Update this function whenever struct flow changes. */
-    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 27);
+    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 28);
 
     uint64_t map = (flow->tunnel.ip_dst) ? MINIFLOW_MAP(tunnel) : 0;
 
     /* Metadata fields that can appear on packet input. */
     map |= MINIFLOW_MAP(skb_priority) | MINIFLOW_MAP(pkt_mark)
         | MINIFLOW_MAP(recirc_id) | MINIFLOW_MAP(dp_hash)
-        | MINIFLOW_MAP(in_port)
+        | MINIFLOW_MAP(packet_type) | MINIFLOW_MAP(in_port)
         | MINIFLOW_MAP(dl_dst) | MINIFLOW_MAP(dl_src)
         | MINIFLOW_MAP(dl_type) | MINIFLOW_MAP(vlan_tci);
 
@@ -978,7 +981,7 @@ void
 flow_wildcards_clear_non_packet_fields(struct flow_wildcards *wc)
 {
     /* Update this function whenever struct flow changes. */
-    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 27);
+    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 28);
 
     memset(&wc->masks.metadata, 0, sizeof wc->masks.metadata);
     memset(&wc->masks.regs, 0, sizeof wc->masks.regs);
@@ -1535,7 +1538,7 @@ flow_push_mpls(struct flow *flow, int n, ovs_be16 mpls_eth_type,
         flow->mpls_lse[0] = set_mpls_lse_values(ttl, tc, 1, htonl(label));
 
         /* Clear all L3 and L4 fields. */
-        BUILD_ASSERT(FLOW_WC_SEQ == 27);
+        BUILD_ASSERT(FLOW_WC_SEQ == 28);
         memset((char *) flow + FLOW_SEGMENT_2_ENDS_AT, 0,
                sizeof(struct flow) - FLOW_SEGMENT_2_ENDS_AT);
     }

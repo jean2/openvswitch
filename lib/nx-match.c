@@ -842,7 +842,10 @@ nx_put_raw(struct ofpbuf *b, enum ofp_version oxm, const struct match *match,
     int match_len;
     int i;
 
-    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 27);
+    BUILD_ASSERT_DECL(FLOW_WC_SEQ == 28);
+
+    /* OpenFlow 1.5+ Packet Type. Must be first. */
+    nxm_put_32(b, MFF_PACKET_TYPE, oxm, flow->packet_type);
 
     /* Metadata. */
     if (match->wc.masks.dp_hash) {

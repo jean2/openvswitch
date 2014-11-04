@@ -38,7 +38,7 @@ struct pkt_metadata;
 /* This sequence number should be incremented whenever anything involving flows
  * or the wildcarding of flows changes.  This will cause build assertion
  * failures in places which likely need to be updated. */
-#define FLOW_WC_SEQ 27
+#define FLOW_WC_SEQ 28
 
 /* Number of Open vSwitch extension 32-bit registers. */
 #define FLOW_N_REGS 8
@@ -101,6 +101,7 @@ struct flow {
     uint32_t skb_priority;      /* Packet priority for QoS. */
     uint32_t pkt_mark;          /* Packet mark. */
     uint32_t recirc_id;         /* Must be exact match. */
+    ovs_be32 packet_type;       /* Packet Type. */
     union flow_in_port in_port; /* Input port.*/
 
     /* L2, Order the same as in the Ethernet header! */
@@ -153,8 +154,8 @@ BUILD_ASSERT_DECL(sizeof(struct flow) % 4 == 0);
 
 /* Remember to update FLOW_WC_SEQ when changing 'struct flow'. */
 BUILD_ASSERT_DECL(offsetof(struct flow, dp_hash) + sizeof(uint32_t)
-                  == sizeof(struct flow_tnl) + 176
-                  && FLOW_WC_SEQ == 27);
+                  == sizeof(struct flow_tnl) + 180
+                  && FLOW_WC_SEQ == 28);
 
 /* Incremental points at which flow classification may be performed in
  * segments.
@@ -187,6 +188,7 @@ struct flow_metadata {
     ovs_be64 metadata;               /* OpenFlow 1.1+ metadata field. */
     uint32_t regs[FLOW_N_REGS];      /* Registers. */
     uint32_t pkt_mark;               /* Packet mark. */
+    ovs_be32 packet_type;            /* Packet Type. */
     ofp_port_t in_port;              /* OpenFlow port or zero. */
 };
 
