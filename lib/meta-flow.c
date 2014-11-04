@@ -118,6 +118,8 @@ mf_is_all_wild(const struct mf_field *mf, const struct flow_wildcards *wc)
         return !wc->masks.tunnel.tun_id;
     case MFF_METADATA:
         return !wc->masks.metadata;
+    case MFF_PACKET_TYPE:
+        return !wc->masks.packet_type;
     case MFF_IN_PORT:
     case MFF_IN_PORT_OXM:
         return !wc->masks.in_port.ofp_port;
@@ -370,6 +372,7 @@ mf_is_value_valid(const struct mf_field *mf, const union mf_value *value)
     case MFF_TUN_TTL:
     case MFF_TUN_FLAGS:
     case MFF_METADATA:
+    case MFF_PACKET_TYPE:
     case MFF_IN_PORT:
     case MFF_SKB_PRIORITY:
     case MFF_PKT_MARK:
@@ -485,6 +488,9 @@ mf_get_value(const struct mf_field *mf, const struct flow *flow,
 
     case MFF_METADATA:
         value->be64 = flow->metadata;
+        break;
+    case MFF_PACKET_TYPE:
+        value->be32 = flow->packet_type;
         break;
 
     case MFF_IN_PORT:
@@ -690,6 +696,9 @@ mf_set_value(const struct mf_field *mf,
 
     case MFF_METADATA:
         match_set_metadata(match, value->be64);
+        break;
+    case MFF_PACKET_TYPE:
+        match_set_packet_type(match, value->be32);
         break;
 
     case MFF_IN_PORT:
@@ -919,6 +928,9 @@ mf_set_flow_value(const struct mf_field *mf,
 
     case MFF_METADATA:
         flow->metadata = value->be64;
+        break;
+    case MFF_PACKET_TYPE:
+        flow->packet_type = value->be32;
         break;
 
     case MFF_IN_PORT:
@@ -1174,6 +1186,10 @@ mf_set_wild(const struct mf_field *mf, struct match *match)
     case MFF_METADATA:
         match_set_metadata_masked(match, htonll(0), htonll(0));
         break;
+    case MFF_PACKET_TYPE:
+        match->flow.packet_type = 0;
+        match->wc.masks.packet_type = 0;
+        break;
 
     case MFF_IN_PORT:
     case MFF_IN_PORT_OXM:
@@ -1373,6 +1389,7 @@ mf_set(const struct mf_field *mf,
 
     switch (mf->id) {
     case MFF_RECIRC_ID:
+    case MFF_PACKET_TYPE:
     case MFF_IN_PORT:
     case MFF_IN_PORT_OXM:
     case MFF_ACTSET_OUTPUT:

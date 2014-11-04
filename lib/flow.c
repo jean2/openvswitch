@@ -726,6 +726,7 @@ flow_set_metadata(const struct flow_metadata *fmd, struct flow *flow)
     memcpy(flow->regs, fmd->regs, sizeof flow->regs);
     flow->pkt_mark = fmd->pkt_mark;
     flow->in_port.ofp_port = fmd->in_port;
+    flow->packet_type = fmd->packet_type;
 }
 
 char *
@@ -969,7 +970,7 @@ flow_wc_map(const struct flow *flow)
     /* Metadata fields that can appear on packet input. */
     map |= MINIFLOW_MAP(skb_priority) | MINIFLOW_MAP(pkt_mark)
         | MINIFLOW_MAP(recirc_id) | MINIFLOW_MAP(dp_hash)
-        | MINIFLOW_MAP(in_port)
+        | MINIFLOW_MAP(packet_type) | MINIFLOW_MAP(in_port)
         | MINIFLOW_MAP(dl_dst) | MINIFLOW_MAP(dl_src)
         | MINIFLOW_MAP(dl_type) | MINIFLOW_MAP(vlan_tci);
 

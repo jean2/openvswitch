@@ -1191,6 +1191,7 @@ OVS_VSWITCHD_START
       tun_src: arbitrary mask
       tun_dst: arbitrary mask
       metadata: arbitrary mask
+      packet_type: exact match or wildcard
       in_port: exact match or wildcard
       in_port_oxm: exact match or wildcard
       actset_output: exact match or wildcard
