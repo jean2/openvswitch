@@ -3655,6 +3655,10 @@ ofputil_decode_packet_out(struct ofputil_packet_out *po,
             return error;
         }
         ofputil_match_to_fmd(&match, &(po->fmd));
+        /* We only support Ethernet packets. */
+        if (po->fmd.packet_type != 0) {
+            return OFPERR_OFPBRC_BAD_PACKET;
+        }
     } else if (raw == OFPRAW_OFPT11_PACKET_OUT) {
         enum ofperr error;
         const struct ofp11_packet_out *opo = ofpbuf_pull(&b, sizeof *opo);

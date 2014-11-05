@@ -2490,6 +2490,24 @@ OFPT_BARRIER_REPLY (OF1.3):
 OVS_VSWITCHD_STOP
 AT_CLEANUP
 
+dnl This test checks that invalid packet-type returns an error.
+AT_SETUP([ofproto - packet-out with invalid packet-type (OpenFlow 1.5)])
+OVS_VSWITCHD_START
+
+# Send a packet-out with an invalid packet-type (udp-port, VxLAN).
+AT_CHECK([ovs-ofctl -O OpenFlow15 packet-out-packet-type br0 CONTROLLER 0x10806 'table' '0001020304050010203040501234'], [1], ,
+  [OFPT_ERROR (OF1.5) (xid=0x2): OFPBRC_BAD_PACKET
+OFPT_PACKET_OUT (OF1.5) (xid=0x2):
+(***truncated to 64 bytes from 70***)
+00000000  06 0d 00 46 00 00 00 02-ff ff ff ff 00 10 00 00 |...F............|
+00000010  00 01 00 14 80 00 54 04-00 01 08 06 80 00 00 04 |......T.........|
+00000020  ff ff ff fd 00 00 00 00-00 00 00 10 ff ff ff f9 |................|
+00000030  00 00 00 00 00 00 00 00-00 01 02 03 04 05 00 10 |................|
+])
+
+OVS_VSWITCHD_STOP
+AT_CLEANUP
+
 dnl This test checks that metadata is encoded in packet_in structures,
 dnl supported by NXAST.
 AT_SETUP([ofproto - packet-out with metadata and dual set_field (OpenFlow 1.3)])
