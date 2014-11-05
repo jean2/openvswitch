@@ -843,6 +843,18 @@ format_be64_masked(struct ds *s, const char *name,
 }
 
 static void
+format_packet_type(struct ds *s, const char *name,
+                   ovs_be32 value, ovs_be32 mask)
+{
+    if (mask != htonl(0)) {
+        uint32_t packet_type = ntohl(value);
+
+        ds_put_format(s, "%s=(%#"PRIx16",%#"PRIx16")", name, (uint16_t) (packet_type >> 16), (uint16_t) (packet_type & 0xFFFF));
+        ds_put_char(s, ',');
+    }
+}
+
+static void
 format_flow_tunnel(struct ds *s, const struct match *match)
 {
     const struct flow_wildcards *wc = &match->wc;
@@ -905,7 +917,7 @@ match_format(const struct match *match, struct ds *s, int priority)
         ds_put_char(s, ',');
     }
 
-    format_be32_masked(s, "packet_type", f->packet_type, wc->masks.packet_type);
+    format_packet_type(s, "packet_type", f->packet_type, wc->masks.packet_type);
 
     if (wc->masks.dl_type) {
         skip_type = true;

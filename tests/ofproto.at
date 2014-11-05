@@ -2483,7 +2483,7 @@ ovs-appctl -t ovs-ofctl exit
 AT_CHECK([sed 's/ (xid=0x[[0-9a-fA-F]]*)//' monitor.log], [0], [dnl
 OFPT_BARRIER_REPLY (OF1.3):
 OFPT_PACKET_IN (OF1.3): cookie=0x0 total_len=14 in_port=CONTROLLER metadata=0xfafafafa5a5a5a5a (via action) data_len=14 (unbuffered)
-packet_type=0,in_port=0,vlan_tci=0x0000,dl_src=00:10:20:30:40:50,dl_dst=00:01:02:03:04:05,dl_type=0x1234
+packet_type=(0,0),in_port=0,vlan_tci=0x0000,dl_src=00:10:20:30:40:50,dl_dst=00:01:02:03:04:05,dl_type=0x1234
 OFPT_BARRIER_REPLY (OF1.3):
 ])
 
