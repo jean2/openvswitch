@@ -1020,6 +1020,7 @@ flow_wildcards_clear_non_packet_fields(struct flow_wildcards *wc)
     memset(&wc->masks.metadata, 0, sizeof wc->masks.metadata);
     memset(&wc->masks.regs, 0, sizeof wc->masks.regs);
     wc->masks.actset_output = 0;
+    memset(&wc->masks.packet_type, 0, sizeof wc->masks.packet_type);
 }
 
 /* Returns true if 'wc' matches every packet, false if 'wc' fixes any bits or

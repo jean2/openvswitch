@@ -2484,9 +2484,48 @@ ovs-appctl -t ovs-ofctl exit
 
 AT_CHECK([sed 's/ (xid=0x[[0-9a-fA-F]]*)//' monitor.log], [0], [dnl
 OFPT_BARRIER_REPLY (OF1.3):
-OFPT_PACKET_IN (OF1.3): cookie=0x0 total_len=76 in_port=CONTROLLER metadata=0xfafafafa5a5a5a5a (via action) data_len=76 (unbuffered)
+OFPT_PACKET_IN (OF1.3): cookie=0x0 total_len=76 in_port=CONTROLLER metadata=0xfafafafa5a5a5a5a (via action) packet_type=0x0 data_len=76 (unbuffered)
 packet_type=(0,0),udp,in_port=0,vlan_tci=0x0000,dl_src=00:26:b9:8c:b0:f9,dl_dst=00:25:83:df:b4:00,nw_src=172.17.55.13,nw_dst=172.16.0.2,nw_tos=0,nw_ecn=0,nw_ttl=0,tp_src=55155,tp_dst=53 udp_csum:8f6d
 OFPT_BARRIER_REPLY (OF1.3):
+])
+
+OVS_VSWITCHD_STOP
+AT_CLEANUP
+
+dnl This test checks that packet-type is properly encoded/decoded.
+AT_SETUP([ofproto - packet-out with packet-type IPv4 (OpenFlow 1.5)])
+OVS_VSWITCHD_START
+ADD_OF_PORTS(
+  [br0], [1], [2])
+
+# Start a monitor listening for packet-ins.
+AT_CHECK([ovs-ofctl -O OpenFlow15 monitor br0 --detach --no-chdir --pidfile])
+ovs-appctl -t ovs-ofctl ofctl/send 0609000c0123456700000080
+ovs-appctl -t ovs-ofctl ofctl/barrier
+ovs-appctl -t ovs-ofctl ofctl/set-output-file monitor.log
+AT_CAPTURE_FILE([monitor.log])
+
+AT_DATA([flows.txt], [dnl
+table=0,priority=20,packet_type=0  actions=set_field:0xfafafafa5a5a5a5a->metadata,controller
+table=0,priority=20,packet_type=0x10800  actions=set_field:0xfcfcfcfc5b5b5b5b->metadata,controller
+table=0,priority=30,packet_type=0x10800,nw_src=172.17.55.13,nw_dst=172.16.0.2  actions=set_field:0xecececec3b3b3b3b->metadata,controller
+table=0,priority=10                actions=controller
+])
+AT_CHECK([ovs-ofctl -O OpenFlow15 add-flows br0 flows.txt])
+ovs-appctl -t ovs-ofctl ofctl/barrier
+
+# Send a packet-out with packet-type (onf, Ethernet).
+AT_CHECK([ovs-ofctl -O OpenFlow15 packet-out-packet-type br0 CONTROLLER 0x10800 'table' '4500003fb7e200000011339bac11370dac100002d7730035002b8f6d86fb0100000100000000000006626c702d7873066e696369726103636f6d00000f00'])
+
+# Stop the monitor and check its output.
+ovs-appctl -t ovs-ofctl ofctl/barrier
+ovs-appctl -t ovs-ofctl exit
+
+AT_CHECK([sed 's/ (xid=0x[[0-9a-fA-F]]*)//' monitor.log], [0], [dnl
+OFPT_BARRIER_REPLY (OF1.5):
+OFPT_PACKET_IN (OF1.5): cookie=0x0 total_len=62 in_port=CONTROLLER metadata=0xecececec3b3b3b3b (via action) packet_type=0x10800 data_len=62 (unbuffered)
+packet_type=(0x1,0x800),udp,in_port=0,nw_src=172.17.55.13,nw_dst=172.16.0.2,nw_tos=0,nw_ecn=0,nw_ttl=0,tp_src=55155,tp_dst=53 udp_csum:0
+OFPT_BARRIER_REPLY (OF1.5):
 ])
 
 OVS_VSWITCHD_STOP

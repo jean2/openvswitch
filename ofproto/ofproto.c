@@ -3163,9 +3163,16 @@ handle_packet_out(struct ofconn *ofconn, const struct ofp_header *oh)
             goto exit_free_ofpacts;
         }
     } else {
-        /* Ensure that the L3 header is 32-bit aligned. */
-        payload = ofpbuf_clone_data_with_headroom(po.packet, po.packet_len, 2);
-        ofpbuf_set_frame(payload, ofpbuf_data(payload));
+        if (po.fmd.packet_type == PACKET_ETH) {
+            /* Ensure that the L3 header is 32-bit aligned. */
+            payload = ofpbuf_clone_data_with_headroom(po.packet, po.packet_len, 2);
+            ofpbuf_set_frame(payload, ofpbuf_data(payload));
+        } else {
+            /* IPv4 or IPv6. Make sure we have space for enough L2 headers. */
+            payload = ofpbuf_clone_data_with_headroom(po.packet, po.packet_len, ETH_HEADER_LEN + 2);
+            ofpbuf_set_frame(payload, ofpbuf_data(payload));
+	    payload->l3_ofs = 0;
+        }
     }
 
     /* Verify actions against packet, then send packet if successful. */

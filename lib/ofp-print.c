@@ -152,6 +152,7 @@ ofp_print_packet_in(struct ds *string, const struct ofp_header *oh,
                   ofputil_packet_in_reason_to_string(pin.reason, reasonbuf,
                                                      sizeof reasonbuf));
 
+    ds_put_format(string, " packet_type=0x%"PRIx32, ntohl(pin.fmd.packet_type));
     ds_put_format(string, " data_len=%"PRIuSIZE, pin.packet_len);
     if (pin.buffer_id == UINT32_MAX) {
         ds_put_format(string, " (unbuffered)");
@@ -167,7 +168,7 @@ ofp_print_packet_in(struct ds *string, const struct ofp_header *oh,
     ds_put_char(string, '\n');
 
     if (verbosity > 0) {
-        char *packet = ofp_packet_to_string(pin.packet, pin.packet_len, false);
+        char *packet = ofp_packet_to_string(pin.packet, pin.packet_len, pin.fmd.packet_type == PACKET_IPV4 || pin.fmd.packet_type == PACKET_IPV6);
         ds_put_cstr(string, packet);
         free(packet);
     }
