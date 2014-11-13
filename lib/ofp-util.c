@@ -6288,7 +6288,8 @@ ofputil_normalize_match__(struct match *match, bool may_log)
     struct flow_wildcards wc;
 
     /* Figure out what fields may be matched. */
-    if (match->flow.dl_type == htons(ETH_TYPE_IP)) {
+    if ((match->flow.dl_type == htons(ETH_TYPE_IP))
+        || (match->flow.packet_type == PACKET_IPV4)) {
         may_match = MAY_NW_PROTO | MAY_IPVx | MAY_NW_ADDR;
         if (match->flow.nw_proto == IPPROTO_TCP ||
             match->flow.nw_proto == IPPROTO_UDP ||
@@ -6296,7 +6297,8 @@ ofputil_normalize_match__(struct match *match, bool may_log)
             match->flow.nw_proto == IPPROTO_ICMP) {
             may_match |= MAY_TP_ADDR;
         }
-    } else if (match->flow.dl_type == htons(ETH_TYPE_IPV6)) {
+    } else if ((match->flow.dl_type == htons(ETH_TYPE_IPV6))
+               || (match->flow.packet_type == PACKET_IPV6)) {
         may_match = MAY_NW_PROTO | MAY_IPVx | MAY_IPV6;
         if (match->flow.nw_proto == IPPROTO_TCP ||
             match->flow.nw_proto == IPPROTO_UDP ||

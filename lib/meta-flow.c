@@ -267,9 +267,11 @@ mf_are_prereqs_ok(const struct mf_field *mf, const struct flow *flow)
       return (flow->dl_type == htons(ETH_TYPE_ARP) ||
               flow->dl_type == htons(ETH_TYPE_RARP));
     case MFP_IPV4:
-        return flow->dl_type == htons(ETH_TYPE_IP);
+        return (flow->dl_type == htons(ETH_TYPE_IP)
+                || flow->packet_type == PACKET_IPV4);
     case MFP_IPV6:
-        return flow->dl_type == htons(ETH_TYPE_IPV6);
+        return (flow->dl_type == htons(ETH_TYPE_IPV6)
+                || flow->packet_type == PACKET_IPV6);
     case MFP_VLAN_VID:
         return (flow->vlan_tci & htons(VLAN_CFI)) != 0;
     case MFP_MPLS:
