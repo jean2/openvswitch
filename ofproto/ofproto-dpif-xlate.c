@@ -2532,8 +2532,9 @@ compose_output_action__(struct xlate_ctx *ctx, ofp_port_t ofp_port,
         odp_put_pop_eth_action(ctx->xout->odp_actions);
     }
 
-    if (flow->base_layer == LAYER_3 && !xport->is_layer3) {
-        flow->base_layer = LAYER_2;
+    if ((flow->packet_type == PACKET_IPV4 || flow->packet_type == PACKET_IPV6)
+        && !xport->is_layer3) {
+        flow->packet_type = PACKET_ETH;
         odp_put_push_eth_action(ctx->xout->odp_actions, flow->dl_src,
                                 flow->dl_dst, flow->dl_type);
     }
@@ -4245,7 +4246,7 @@ xlate_actions(struct xlate_in *xin, struct xlate_out *xout)
 
     flow_wildcards_init_catchall(wc);
     memset(&wc->masks.in_port, 0xff, sizeof wc->masks.in_port);
-    memset(&wc->masks.base_layer, 0xff, sizeof wc->masks.base_layer);
+    memset(&wc->masks.packet_type, 0xff, sizeof wc->masks.packet_type);
     memset(&wc->masks.dl_type, 0xff, sizeof wc->masks.dl_type);
     if (is_ip_any(flow)) {
         wc->masks.nw_frag |= FLOW_NW_FRAG_MASK;

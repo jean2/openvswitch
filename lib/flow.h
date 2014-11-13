@@ -74,9 +74,10 @@ const char *flow_tun_flag_to_string(uint32_t flags);
 /* Maximum number of supported MPLS labels. */
 #define FLOW_MAX_MPLS_LABELS 3
 
-enum base_layer {
-    LAYER_2 = 0,
-    LAYER_3 = 1
+enum packet_type {
+    PACKET_ETH = 0,                        /* namespace = 0, ns_type = 0 */
+    PACKET_IPV4 = CONSTANT_HTONL(0x10800), /* namespace = 1, ns_type = 0x0800 */
+    PACKET_IPV6 = CONSTANT_HTONL(0x186dd), /* namespace = 1, ns_type = 0x86dd */
 };
 
 /*
@@ -95,9 +96,9 @@ enum base_layer {
  * lower layer fields are first used to determine if the later fields need to
  * be looked at.  This enables better wildcarding for datapath flows.
  *
- * The starting layer is specified by 'base_layer'.  When 'base_layer' is
- * LAYER_3, dl_src, dl_tci, and vlan_tci are not used for matching. The
- * dl_type field is still used to specify the layer 3 protocol.
+ * The starting layer is specified by 'packet_type'.  When 'packet_type' is
+ * PACKET_IPV4 or PACKET_IPV6, dl_src, dl_tci, and vlan_tci are not used for
+ * matching. The dl_type field can still be used to match the layer 3 protocol.
  *
  * NOTE: Order of the fields is significant, any change in the order must be
  * reflected in miniflow_extract()!
@@ -113,7 +114,7 @@ struct flow {
     union flow_in_port in_port; /* Input port.*/
     ofp_port_t actset_output;   /* Output port in action set. */
     ovs_be16 pad1;              /* Pad to 32 bits. */
-    uint32_t base_layer;        /* Fields start at this layer */
+    ovs_be32 packet_type;       /* Fields start at this layer */
 
     /* L2, Order the same as in the Ethernet header! */
     uint8_t dl_dst[ETH_ADDR_LEN]; /* Ethernet destination address. */
@@ -201,7 +202,7 @@ struct flow_metadata {
     uint32_t regs[FLOW_N_REGS];      /* Registers. */
     uint32_t pkt_mark;               /* Packet mark. */
     ofp_port_t in_port;              /* OpenFlow port or zero. */
-    uint32_t base_layer;             /* Fields start at this layer */
+    ovs_be32 packet_type;            /* Fields start at this layer */
 };
 
 void flow_extract(struct ofpbuf *, const struct pkt_metadata *md,
@@ -720,7 +721,7 @@ pkt_metadata_from_flow(const struct flow *flow)
     md.skb_priority = flow->skb_priority;
     md.pkt_mark = flow->pkt_mark;
     md.in_port = flow->in_port;
-    md.base_layer = flow->base_layer;
+    md.packet_type = flow->packet_type;
 
     return md;
 }

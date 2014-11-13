@@ -62,7 +62,7 @@ struct pkt_metadata {
     uint32_t skb_priority;      /* Packet priority for QoS. */
     uint32_t pkt_mark;          /* Packet mark. */
     union flow_in_port in_port; /* Input port. */
-    uint32_t base_layer;        /* Packet starts at this layer */
+    ovs_be32 packet_type;       /* Packet starts at this layer */
 };
 
 #define PKT_METADATA_INITIALIZER(PORT) \

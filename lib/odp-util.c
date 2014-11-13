@@ -2635,7 +2635,8 @@ odp_flow_key_from_flow__(struct ofpbuf *buf, const struct flow *flow,
         nl_msg_put_odp_port(buf, OVS_KEY_ATTR_IN_PORT, odp_in_port);
     }
 
-    if (flow->base_layer == LAYER_3) {
+    if ((flow->packet_type == PACKET_IPV4)
+        || (flow->packet_type == PACKET_IPV6)) {
         goto noethernet;
     }
 
@@ -2834,7 +2835,7 @@ odp_key_from_pkt_metadata(struct ofpbuf *buf, const struct pkt_metadata *md)
 
     /* Add unintialized OVS_KEY_ATTR_ETHERNET for layer 2 packets; lack of
      * this key attribute signals layer 3 packet */
-    if (md->base_layer == LAYER_2) {
+    if (md->packet_type == PACKET_ETH) {
         nl_msg_put_unspec_uninit(buf, OVS_KEY_ATTR_ETHERNET, sizeof *eth_key);
     }
 }
@@ -2852,7 +2853,8 @@ odp_key_to_pkt_metadata(const struct nlattr *key, size_t key_len,
 
     *md = PKT_METADATA_INITIALIZER(ODPP_NONE);
 
-    md->base_layer = LAYER_3;
+    /* Todo : fixme. */
+    md->packet_type = PACKET_IPV4;
 
     NL_ATTR_FOR_EACH (nla, left, key, key_len) {
         uint16_t type = nl_attr_type(nla);
@@ -2896,7 +2898,7 @@ odp_key_to_pkt_metadata(const struct nlattr *key, size_t key_len,
             wanted_attrs &= ~(1u << OVS_KEY_ATTR_IN_PORT);
             break;
         case OVS_KEY_ATTR_ETHERNET:
-            md->base_layer = LAYER_2;
+            md->packet_type = PACKET_ETH;
         default:
             break;
         }
@@ -3458,22 +3460,25 @@ odp_flow_key_to_flow__(const struct nlattr *key, size_t key_len,
         flow->in_port.odp_port = ODPP_NONE;
     }
 
+    /* Get Ethertype or 802.1Q TPID or FLOW_DL_TYPE_NONE. */
+    if (!parse_ethertype(attrs, present_attrs, &expected_attrs, flow,
+        src_flow)) {
+        return ODP_FIT_ERROR;
+    }
+
     /* Ethernet header. */
     if (present_attrs & (UINT64_C(1) << OVS_KEY_ATTR_ETHERNET)) {
         const struct ovs_key_ethernet *eth_key;
 
         eth_key = nl_attr_get(attrs[OVS_KEY_ATTR_ETHERNET]);
         put_ethernet_key(eth_key, flow);
-        flow->base_layer = LAYER_2;
+        flow->packet_type = PACKET_ETH;
         expected_attrs |= UINT64_C(1) << OVS_KEY_ATTR_ETHERNET;
     } else {
-        flow->base_layer = LAYER_3;
-    }
-
-    /* Get Ethertype or 802.1Q TPID or FLOW_DL_TYPE_NONE. */
-    if (!parse_ethertype(attrs, present_attrs, &expected_attrs, flow,
-        src_flow)) {
-        return ODP_FIT_ERROR;
+	if (flow->dl_type == htons(ETH_TYPE_IPV6))
+            flow->packet_type = PACKET_IPV6;
+        else
+            flow->packet_type = PACKET_IPV4;
     }
 
     if (is_mask
@@ -3484,7 +3489,7 @@ odp_flow_key_to_flow__(const struct nlattr *key, size_t key_len,
     }
     if (is_mask) {
         flow->vlan_tci = htons(0xffff);
-        flow->base_layer = 0xffffffff;
+        flow->packet_type = 0xffffffff;
         if (present_attrs & (UINT64_C(1) << OVS_KEY_ATTR_VLAN)) {
             flow->vlan_tci = nl_attr_get_be16(attrs[OVS_KEY_ATTR_VLAN]);
             expected_attrs |= (UINT64_C(1) << OVS_KEY_ATTR_VLAN);
@@ -3724,7 +3729,9 @@ commit_set_ether_addr_action(const struct flow *flow, struct flow *base_flow,
      * the appropriate MAC source and destination addresses, no need to add a
      * set action
      */
-    if (base_flow->base_layer == LAYER_3 && flow->base_layer == LAYER_2) {
+    if ((base_flow->packet_type == PACKET_IPV4
+         || base_flow->packet_type == PACKET_IPV6)
+        && flow->packet_type == PACKET_ETH) {
         return;
     }
 

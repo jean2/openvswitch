@@ -406,7 +406,7 @@ miniflow_extract(struct ofpbuf *packet, const struct pkt_metadata *md,
 
     if (packet->l3_ofs) {
         frame = data;
-        miniflow_push_uint32(mf, base_layer, LAYER_2);
+        miniflow_push_uint32(mf, packet_type, PACKET_ETH);
 
         /* Must have full Ethernet header to proceed. */
         if (OVS_UNLIKELY(size < sizeof(struct eth_header))) {
@@ -438,10 +438,13 @@ miniflow_extract(struct ofpbuf *packet, const struct pkt_metadata *md,
         /* Network layer. */
         packet->l3_ofs = (char *)data - frame;
     } else {
-        miniflow_push_uint32(mf, base_layer, LAYER_3);
-
         /* We assume L3 packets are either IPv4 or IPv6 */
         dl_type = get_l3_eth_type(packet);
+	if (dl_type == htons(ETH_TYPE_IPV6)) {
+            miniflow_push_uint32(mf, packet_type, PACKET_IPV6);
+        } else {
+            miniflow_push_uint32(mf, packet_type, PACKET_IPV4);
+        }
         miniflow_push_be16(mf, dl_type, dl_type);
         miniflow_push_be16(mf, vlan_tci, 0);
     }
@@ -706,7 +709,7 @@ flow_get_metadata(const struct flow *flow, struct flow_metadata *fmd)
     memcpy(fmd->regs, flow->regs, sizeof fmd->regs);
     fmd->pkt_mark = flow->pkt_mark;
     fmd->in_port = flow->in_port.ofp_port;
-    fmd->base_layer = flow->base_layer;
+    fmd->packet_type = flow->packet_type;
 }
 
 void
@@ -883,12 +886,12 @@ void flow_wildcards_init_for_packet(struct flow_wildcards *wc,
     WC_MASK_FIELD(wc, recirc_id);
     WC_MASK_FIELD(wc, dp_hash);
     WC_MASK_FIELD(wc, in_port);
-    WC_MASK_FIELD(wc, base_layer);
+    WC_MASK_FIELD(wc, packet_type);
 
     /* actset_output wildcarded. */
 
     WC_MASK_FIELD(wc, dl_type);
-    if (flow->base_layer == LAYER_2) {
+    if (flow->packet_type == PACKET_ETH) {
         WC_MASK_FIELD(wc, dl_dst);
         WC_MASK_FIELD(wc, dl_src);
         WC_MASK_FIELD(wc, vlan_tci);
